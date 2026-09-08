@@ -45,8 +45,7 @@ spec:
       labels:
         app: minio
     spec:
-      # Do not set runAsUser/fsGroup — restricted-v2 assigns the namespace UID
-      # range. Hardcoding 1000 blocks the pod and trips progressDeadlineSeconds.
+      serviceAccountName: minio
       securityContext:
         runAsNonRoot: true
         seccompProfile:
