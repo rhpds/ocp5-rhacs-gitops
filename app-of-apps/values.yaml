@@ -23,14 +23,19 @@ common:
 acs:
   enabled: true
   name: acs
-  namespace: acs
+  namespace: rhacs-operator
   clusterName: local-cluster
   adminPassword: ""
 
 acsVirt:
   enabled: true
   name: acs-virt
-  namespace: acs-virt
+  namespace: rhacs-virt
+
+acsMicroservicesDemo:
+  enabled: true
+  name: acs-microservices-demo
+  namespace: rhacs-microservices-demo
 
 clusterObservability:
   enabled: true
@@ -50,7 +55,7 @@ mcpGateway:
 acsMcpServer:
   enabled: true
   name: acs-mcp-server
-  namespace: acs-mcp
+  namespace: rhacs-mcp
 
 openshiftMcpServer:
   enabled: true

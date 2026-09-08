@@ -15,6 +15,7 @@ spec:
       valuesObject:
         acsNamespace: {{ .Values.acs.namespace }}
         olsNamespace: {{ .Values.openshiftAgenticLightspeed.namespace }}
+        mcpNamespace: {{ .Values.acsMcpServer.namespace }}
         adminPassword: {{ .Values.acs.adminPassword }}
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

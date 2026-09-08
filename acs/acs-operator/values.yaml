@@ -1,14 +1,14 @@
 nameOverride: ""
 
 name: rhacs-operator
-namespace: openshift-operators
+namespace: rhacs-operator
 
 subscription:
   channel: latest
   installPlanApproval: Automatic
   name: rhacs-operator
   source: acs-nightly-catalog
-  sourceNamespace: openshift-operators
+  sourceNamespace: rhacs-operator
 
 catalogSource:
   enabled: true

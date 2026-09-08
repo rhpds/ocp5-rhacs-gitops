@@ -1,3 +1,4 @@
-acsNamespace: acs
+acsNamespace: rhacs-operator
 olsNamespace: openshift-lightspeed
+mcpNamespace: rhacs-mcp
 adminPassword: ""

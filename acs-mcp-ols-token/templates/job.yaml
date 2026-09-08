@@ -104,7 +104,7 @@ spec:
                     },
                     {
                       "name": "acs-mcp",
-                      "url": "https://acs-mcp-server-stackrox-mcp.acs-mcp.svc:443/mcp",
+                      "url": "https://acs-mcp-server-stackrox-mcp.{{ .Values.mcpNamespace }}.svc:443/mcp",
                       "timeout": 120,
                       "headers": [
                         {

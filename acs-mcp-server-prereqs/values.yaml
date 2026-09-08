@@ -1,5 +1,5 @@
-acsNamespace: acs
-targetNamespace: acs-mcp
+acsNamespace: rhacs-operator
+targetNamespace: rhacs-mcp
 sourceSecret: central-tls
 targetSecret: central-ca-cert
 sourceKey: ca.pem
