@@ -6,8 +6,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "2"
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Regular Job, not a Sync hook. A hook that never completes (MinIO down)
+    # blocks the whole Application and later git commits never apply.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
   backoffLimit: 20
   template:
@@ -16,8 +17,7 @@ spec:
       serviceAccountName: minio
       securityContext:
         runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
+        runAsUser: 1000
       containers:
         - name: mc
           image: {{ .Values.minio.mcImage }}

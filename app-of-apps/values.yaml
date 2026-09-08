@@ -1,6 +1,6 @@
 gitops:
-  repoURL: https://github.com/rhpds/ocp5-ea-gitops.git
-  targetRevision: dev
+  repoURL: https://github.com/rhpds/ocp5-rhacs-gitops.git
+  targetRevision: main
 
 argocd:
   namespace: openshift-gitops

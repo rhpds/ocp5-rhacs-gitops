@@ -5,7 +5,7 @@ metadata:
   name: minio
   namespace: {{ .Release.Namespace }}
   annotations:
-    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-wave: "1"
 ---
 # The MinIO image runs as UID/GID 1000. restricted-v2 only allows the
 # namespace allocated range (e.g. 1000810000-1000819999), so the default SA
@@ -16,7 +16,7 @@ metadata:
   name: minio-scc-anyuid
   namespace: {{ .Release.Namespace }}
   annotations:
-    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-wave: "1"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
