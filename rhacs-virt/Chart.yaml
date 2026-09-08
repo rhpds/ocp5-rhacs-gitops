@@ -1,5 +1,5 @@
 apiVersion: v2
-name: acs-virt
+name: rhacs-virt
 description: RHEL 9 VirtualMachine for ACS scanning demos
 type: application
 version: 0.1.0

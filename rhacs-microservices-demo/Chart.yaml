@@ -1,5 +1,5 @@
 apiVersion: v2
-name: acs-microservices-demo
+name: rhacs-microservices-demo
 description: Google microservices demo app for ACS security scanning exercises
 type: application
 version: 0.1.0

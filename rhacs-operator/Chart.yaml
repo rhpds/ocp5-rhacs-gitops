@@ -1,5 +1,5 @@
 apiVersion: v2
-name: acs
+name: rhacs-operator
 description: Red Hat Advanced Cluster Security for Kubernetes
 type: application
 version: 0.1.0
@@ -7,7 +7,7 @@ version: 0.1.0
 dependencies:
   - name: acs-operator
     version: 0.1.0
-    repository: file://acs-operator
+    repository: file://operator
   - name: acs-instance
     version: 0.1.0
-    repository: file://acs-instance
+    repository: file://instance

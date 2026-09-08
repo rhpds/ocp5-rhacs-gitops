@@ -1,14 +1,14 @@
 {{- if .Values.acsMicroservicesDemo.enabled }}
 apiVersion: argoproj.io/v1alpha1
 kind: Application
-{{ include "app-of-apps.metadata" (dict "name" "acs-microservices-demo" "namespace" .Values.argocd.namespace "syncWave" "1") }}
+{{ include "app-of-apps.metadata" (dict "name" .Values.acsMicroservicesDemo.name "namespace" .Values.argocd.namespace "syncWave" "1") }}
 spec:
   destination:
     namespace: {{ .Values.acsMicroservicesDemo.namespace }}
     server: https://kubernetes.default.svc
   project: default
   source:
-    path: acs-microservices-demo
+    path: rhacs-microservices-demo
     repoURL: {{ .Values.gitops.repoURL }}
     targetRevision: {{ .Values.gitops.targetRevision }}
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}

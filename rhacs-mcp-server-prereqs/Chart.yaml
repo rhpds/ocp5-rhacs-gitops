@@ -1,5 +1,5 @@
 apiVersion: v2
-name: acs-mcp-server-prereqs
+name: rhacs-mcp-server-prereqs
 description: Prerequisites for ACS MCP Server (CA cert copy from Central)
 type: application
 version: 0.1.0

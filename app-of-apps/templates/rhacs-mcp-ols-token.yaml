@@ -1,14 +1,14 @@
 {{- if .Values.acsMcpServer.enabled }}
 apiVersion: argoproj.io/v1alpha1
 kind: Application
-{{ include "app-of-apps.metadata" (dict "name" "acs-mcp-ols-token" "namespace" .Values.argocd.namespace "syncWave" "2") }}
+{{ include "app-of-apps.metadata" (dict "name" "rhacs-mcp-ols-token" "namespace" .Values.argocd.namespace "syncWave" "2") }}
 spec:
   destination:
     namespace: {{ .Values.openshiftAgenticLightspeed.namespace }}
     server: https://kubernetes.default.svc
   project: default
   source:
-    path: acs-mcp-ols-token
+    path: rhacs-mcp-ols-token
     repoURL: {{ .Values.gitops.repoURL }}
     targetRevision: {{ .Values.gitops.targetRevision }}
     helm:
