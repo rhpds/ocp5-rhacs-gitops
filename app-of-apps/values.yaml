@@ -62,6 +62,12 @@ webTerminal:
   name: web-terminal
   namespace: openshift-operators
 
+quay:
+  enabled: true
+  name: quay
+  namespace: quay
+  adminUsername: admin
+
 mockMcpServers:
   enabled: true
   name: mock-mcp-servers

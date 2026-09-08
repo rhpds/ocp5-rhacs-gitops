@@ -1,0 +1,28 @@
+{{- if .Values.quay.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" .Values.quay.name "namespace" .Values.argocd.namespace "syncWave" "0") }}
+spec:
+  destination:
+    namespace: {{ .Values.quay.namespace }}
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: quay
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    helm:
+      valuesObject:
+        subscription:
+          source: {{ include "app-of-apps.operatorSource" . }}
+        clusterSubdomain: {{ .Values.cluster.subdomain | quote }}
+        adminUsername: {{ .Values.quay.adminUsername | quote }}
+        adminPassword: {{ .Values.common.password | quote }}
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: quay-config-bundle
+      jsonPointers:
+        - /data
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}
+{{- end }}

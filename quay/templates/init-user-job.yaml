@@ -1,0 +1,94 @@
+{{- if .Values.adminPassword }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: quay-init-user
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: quay-init-user
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 30
+  template:
+    spec:
+      serviceAccountName: quay-init-user
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: init
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: QUAY_HOST
+              {{- if .Values.clusterSubdomain }}
+              value: https://quay.{{ .Values.clusterSubdomain }}
+              {{- else }}
+              value: https://{{ .Values.registry.name }}-quay.{{ .Release.Namespace }}.svc
+              {{- end }}
+            - name: QUAY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: quay-admin-password
+                  key: username
+            - name: QUAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: quay-admin-password
+                  key: password
+            - name: QUAY_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: quay-admin-password
+                  key: email
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              echo "Waiting for Quay at ${QUAY_HOST}..."
+              for i in $(seq 1 90); do
+                if curl -skf "${QUAY_HOST}/api/v1/discovery" >/dev/null; then
+                  echo "Quay API is reachable"
+                  break
+                fi
+                echo "Attempt ${i}/90: Quay not ready"
+                sleep 10
+              done
+              curl -skf "${QUAY_HOST}/api/v1/discovery" >/dev/null
+
+              PAYLOAD=$(python3 -c 'import json,os; print(json.dumps({"username":os.environ["QUAY_USERNAME"],"password":os.environ["QUAY_PASSWORD"],"email":os.environ["QUAY_EMAIL"],"access_token": True}))')
+              HTTP_CODE=$(curl -sk -o /tmp/quay-init.json -w "%{http_code}" \
+                -X POST "${QUAY_HOST}/api/v1/user/initialize" \
+                -H "Content-Type: application/json" \
+                -d "${PAYLOAD}")
+              echo "Initialize HTTP ${HTTP_CODE}"
+              cat /tmp/quay-init.json || true
+              echo
+              if [ "${HTTP_CODE}" = "200" ] || [ "${HTTP_CODE}" = "201" ]; then
+                echo "Quay admin user created"
+                exit 0
+              fi
+              if [ "${HTTP_CODE}" = "400" ] || [ "${HTTP_CODE}" = "409" ]; then
+                echo "Quay admin user already exists"
+                exit 0
+              fi
+              echo "Failed to initialize Quay admin user"
+              exit 1
+{{- end }}

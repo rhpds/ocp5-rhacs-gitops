@@ -1,0 +1,52 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: quay-config-bundle
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: Prune=false
+type: Opaque
+stringData:
+  config.yaml: |
+    FEATURE_USER_INITIALIZE: true
+    BROWSER_API_CALLS_XHR_ONLY: false
+    SUPER_USERS:
+      - {{ .Values.adminUsername }}
+    FEATURE_USER_CREATION: false
+    FEATURE_ANONYMOUS_ACCESS: false
+    PREFERRED_URL_SCHEME: https
+    EXTERNAL_TLS_TERMINATION: true
+    {{- if .Values.clusterSubdomain }}
+    SERVER_HOSTNAME: quay.{{ .Values.clusterSubdomain }}
+    {{- end }}
+    DISTRIBUTED_STORAGE_DEFAULT_LOCATIONS: []
+    DISTRIBUTED_STORAGE_PREFERENCE:
+      - default
+    DISTRIBUTED_STORAGE_CONFIG:
+      default:
+        - RadosGWStorage
+        - hostname: minio.{{ .Release.Namespace }}.svc.cluster.local
+          is_secure: false
+          port: 9000
+          storage_path: /datastorage/registry
+          bucket_name: {{ .Values.minio.bucket }}
+          access_key: {{ .Values.minio.rootUser }}
+          secret_key: {{ .Values.minio.rootPassword }}
+          s3_region: us-east-1
+{{- if .Values.adminPassword }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: quay-admin-password
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+type: Opaque
+stringData:
+  username: {{ .Values.adminUsername | quote }}
+  password: {{ .Values.adminPassword | quote }}
+  email: {{ .Values.adminEmail | quote }}
+{{- end }}

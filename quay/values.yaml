@@ -1,0 +1,23 @@
+subscription:
+  channel: stable-3.15
+  installPlanApproval: Automatic
+  name: quay-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+
+registry:
+  name: registry
+
+adminUsername: admin
+adminPassword: ""
+adminEmail: admin@example.com
+
+clusterSubdomain: ""
+
+minio:
+  rootUser: minio
+  rootPassword: minio-quay-storage
+  bucket: quay-datastore
+  storage: 50Gi
+  image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+  mcImage: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
