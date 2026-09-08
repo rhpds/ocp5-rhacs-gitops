@@ -56,11 +56,12 @@ spec:
       labels:
         app: istio-ingressgateway
         istio: ingressgateway
+        sidecar.istio.io/inject: "true"
         istio.io/rev: {{ .Values.istio.revision }}
     spec:
       containers:
       - name: istio-proxy
-        image: auto
+        image: auto # replaced by the istiod mutating webhook at pod create
       serviceAccountName: istio-ingressgateway
 ---
 apiVersion: v1

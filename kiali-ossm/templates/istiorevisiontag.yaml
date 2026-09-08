@@ -1,0 +1,13 @@
+# Stable injection alias. RevisionBased names the live revision
+# default-v1-30-4 (and so on); hardcoding that in labels leaves
+# image: auto unreplaced when the operator ships a new patch.
+apiVersion: sailoperator.io/v1
+kind: IstioRevisionTag
+metadata:
+  name: {{ .Values.istio.revision }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  targetRef:
+    kind: Istio
+    name: default

@@ -14,7 +14,9 @@ tempo:
 istio:
   namespace: istio-system
   cniNamespace: istio-cni
-  revision: default-v1-30-3
+  # IstioRevisionTag name. Do not pin default-v1-30-x; the operator
+  # appends the active patch and a mismatch leaves image: auto unreplaced.
+  revision: default
 
 minio:
   accessKeyId: minio
