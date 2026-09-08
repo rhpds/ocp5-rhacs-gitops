@@ -11,6 +11,14 @@ spec:
     exposure:
       route:
         enabled: true
+        # Passthrough (central-rhacs-operator) cannot be iframed in Showroom.
+        # Reencrypt lets the router strip X-Frame-Options — same pattern as
+        # ocp4_workload_rhacs_enable_reencrypt_route in the RHACS demo catalog.
+        reencrypt:
+          enabled: true
+{{- if .Values.clusterSubdomain }}
+          host: central-reencrypt-stackrox.{{ .Values.clusterSubdomain }}
+{{- end }}
       loadBalancer:
         enabled: false
       nodePort:
