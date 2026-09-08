@@ -1,0 +1,83 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keycloak-realm-displayname
+  namespace: {{ .Values.argocd.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: keycloak-realm-displayname
+  namespace: keycloak
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["keycloak-initial-admin"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: keycloak-realm-displayname
+  namespace: keycloak
+subjects:
+  - kind: ServiceAccount
+    name: keycloak-realm-displayname
+    namespace: {{ .Values.argocd.namespace }}
+roleRef:
+  kind: Role
+  name: keycloak-realm-displayname
+  apiGroup: rbac.authorization.k8s.io
+---
+# Sets the Keycloak realm display name shown on the login page.
+# The ocp4_workload_authentication role does not support this natively,
+# and KeycloakRealmImport is a one-shot resource that won't re-reconcile,
+# so we patch via the Keycloak admin API after import completes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-realm-displayname
+  namespace: {{ .Values.argocd.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    spec:
+      serviceAccountName: keycloak-realm-displayname
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: patch-realm
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              REALM="keycloak"
+              DISPLAY_NAME="Red Hat OpenShift 5 Early Access"
+              SSO_URL="https://keycloak.keycloak.svc:8443"
+
+              ADMIN_USER=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.username}' | base64 -d)
+              ADMIN_PASS=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.password}' | base64 -d)
+
+              TOKEN=$(curl -sk "${SSO_URL}/realms/master/protocol/openid-connect/token" \
+                -d "grant_type=password&client_id=admin-cli&username=${ADMIN_USER}&password=${ADMIN_PASS}" | \
+                python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+              curl -sk -X PUT "${SSO_URL}/admin/realms/${REALM}" \
+                -H "Authorization: Bearer ${TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "{\"displayName\": \"${DISPLAY_NAME}\"}"
+
+              echo "Realm display name set to: ${DISPLAY_NAME}"

@@ -15,7 +15,6 @@ spec:
       serviceAccountName: cluster-version-operator
       restartPolicy: OnFailure
       securityContext:
-        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
