@@ -32,6 +32,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
+    # Replace avoids 3-way merge re-adding seccompProfile from an older live object.
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
   replicas: 1
   progressDeadlineSeconds: 600
@@ -44,6 +46,8 @@ spec:
     metadata:
       labels:
         app: minio
+      annotations:
+        openshift.io/required-scc: anyuid
     spec:
       serviceAccountName: minio
       # Image USER is root; anyuid + UID 1000 overrides that. Do not set

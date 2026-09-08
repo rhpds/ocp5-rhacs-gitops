@@ -11,8 +11,10 @@ syncPolicy:
     backoff:
       duration: 5s
       factor: 2
-      maxDuration: 2m0s
-    limit: 30
+      maxDuration: 1m0s
+    # Keep this small. A Running retry pins the SHA from when the
+    # operation started, so later commits will not apply until it ends.
+    limit: 5
   syncOptions:
     - CreateNamespace=true
     - RespectIgnoreDifferences=true

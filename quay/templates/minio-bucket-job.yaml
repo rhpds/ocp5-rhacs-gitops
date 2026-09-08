@@ -12,6 +12,9 @@ metadata:
 spec:
   backoffLimit: 20
   template:
+    metadata:
+      annotations:
+        openshift.io/required-scc: anyuid
     spec:
       restartPolicy: OnFailure
       serviceAccountName: minio
@@ -29,6 +32,11 @@ spec:
           envFrom:
             - secretRef:
                 name: minio
+          env:
+            - name: HOME
+              value: /tmp
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
           command:
             - /bin/sh
             - -c

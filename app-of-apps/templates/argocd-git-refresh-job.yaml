@@ -37,8 +37,7 @@ metadata:
   namespace: {{ .Values.argocd.namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
   template:
     spec:
@@ -60,14 +59,6 @@ spec:
           args:
             - |
               set -euo pipefail
-              oc patch argocd openshift-gitops -n openshift-gitops --type merge -p '{
-                "spec": {
-                  "controller": {
-                    "appSync": "30s"
-                  },
-                  "extraConfig": {
-                    "timeout.reconciliation": "30s"
-                  }
-                }
-              }'
+              # Strategic merge keeps other extraConfig keys (health.lua, etc).
+              oc patch argocd openshift-gitops -n openshift-gitops -p '{"spec":{"controller":{"appSync":"30s"},"extraConfig":{"timeout.reconciliation":"30s"}}}'
               echo "Argo CD git reconciliation set to 30s"
