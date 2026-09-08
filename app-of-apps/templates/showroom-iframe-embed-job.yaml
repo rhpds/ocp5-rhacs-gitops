@@ -1,0 +1,95 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: showroom-iframe-embed
+  namespace: {{ .Values.argocd.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: showroom-iframe-embed
+rules:
+  - apiGroups: ["config.openshift.io"]
+    resources: ["ingresses"]
+    verbs: ["get"]
+  - apiGroups: ["operator.openshift.io"]
+    resources: ["ingresscontrollers"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: showroom-iframe-embed
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: showroom-iframe-embed
+subjects:
+  - kind: ServiceAccount
+    name: showroom-iframe-embed
+    namespace: {{ .Values.argocd.namespace }}
+---
+# Strip X-Frame-Options and allow Showroom (and other *.apps) to iframe
+# cluster UIs. Same IngressController header pattern as
+# agnosticd.showroom.ocp4_workload_ocp_console_embed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: showroom-iframe-embed
+  namespace: {{ .Values.argocd.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    spec:
+      serviceAccountName: showroom-iframe-embed
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: patch-ingress
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
+              if [ -z "${DOMAIN}" ]; then
+                echo "cluster ingress domain is empty" >&2
+                exit 1
+              fi
+              echo "Allowing frame-ancestors for https://*.${DOMAIN}"
+              oc patch ingresscontroller default -n openshift-ingress-operator --type=merge -p "{
+                \"spec\": {
+                  \"httpHeaders\": {
+                    \"actions\": {
+                      \"response\": [
+                        {
+                          \"name\": \"X-Frame-Options\",
+                          \"action\": { \"type\": \"Delete\" }
+                        },
+                        {
+                          \"name\": \"Content-Security-Policy\",
+                          \"action\": {
+                            \"type\": \"Set\",
+                            \"set\": {
+                              \"value\": \"frame-ancestors 'self' https://*.${DOMAIN}\"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }"
+              echo "IngressController header actions applied."
