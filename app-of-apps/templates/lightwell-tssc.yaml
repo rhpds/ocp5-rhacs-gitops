@@ -1,0 +1,38 @@
+{{- if .Values.lightwellTssc.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" .Values.lightwellTssc.name "namespace" .Values.argocd.namespace "syncWave" "1") }}
+spec:
+  destination:
+    namespace: {{ .Values.argocd.namespace }}
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: lightwell-tssc
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    helm:
+      valuesObject:
+        gitops:
+          repoUrl: {{ .Values.lightwellTssc.repoURL | quote }}
+          revision: {{ .Values.lightwellTssc.targetRevision | quote }}
+          basePath: {{ .Values.lightwellTssc.basePath | quote }}
+        operator:
+          source: {{ include "app-of-apps.operatorSource" . | quote }}
+          sourceNamespace: openshift-marketplace
+        deployer:
+          domain: {{ .Values.cluster.subdomain | quote }}
+          apiUrl: {{ .Values.cluster.apiServer | quote }}
+{{- if .Values.common.password }}
+        student:
+          password: {{ .Values.common.password | quote }}
+{{- end }}
+        components:
+          rhacs:
+            enabled: true
+            namespace: {{ .Values.acs.namespace }}
+            installOperator: false
+            installCentral: false
+            installSecuredCluster: false
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}
+{{- end }}

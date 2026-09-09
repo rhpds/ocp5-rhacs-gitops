@@ -1,0 +1,5 @@
+apiVersion: v2
+name: lightwell-tssc
+description: Nested Argo CD Applications for the Lightwell TSSC workshop stack
+type: application
+version: 0.1.0

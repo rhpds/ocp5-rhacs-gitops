@@ -1,0 +1,793 @@
+# App of Apps — ArgoCD Applications for each enabled Lightwell workshop component.
+# Sync waves: keycloak (5) → pipelines (8) → operators (10) → gitea (15) → config (20) → renovate (25) → rhdh (30) → apps (40) → validate (45) → showroom (50)
+
+{{- if .Values.components.keycloak.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-keycloak
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.keycloak.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/keycloak
+    helm:
+      valuesObject:
+        keycloak:
+          enabled: {{ .Values.components.keycloak.enabled }}
+          namespace: {{ .Values.components.keycloak.namespace }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.keycloak.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+{{- end }}
+
+{{- if .Values.components.pipelines.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-pipelines
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.pipelines.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/pipelines
+    helm:
+      valuesObject:
+        pipelines:
+          enabled: {{ .Values.components.pipelines.enabled }}
+        operator:
+          source: {{ .Values.operator.source | quote }}
+          sourceNamespace: {{ .Values.operator.sourceNamespace | quote }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.pipelines.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true
+{{- end }}
+
+{{- if .Values.components.rhtas.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-rhtas
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.rhtas.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/rhtas
+    helm:
+      valuesObject:
+        rhtas:
+          enabled: {{ .Values.components.rhtas.enabled }}
+          namespace: {{ .Values.components.rhtas.namespace }}
+        operator:
+          source: {{ .Values.operator.source | quote }}
+          sourceNamespace: {{ .Values.operator.sourceNamespace | quote }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.rhtas.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true
+{{- end }}
+
+{{- if .Values.components.rhtpa.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-rhtpa
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.rhtpa.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/rhtpa
+    helm:
+      valuesObject:
+        rhtpa:
+          enabled: {{ .Values.components.rhtpa.enabled }}
+          namespace: {{ .Values.components.rhtpa.namespace }}
+        operator:
+          source: {{ .Values.operator.source | quote }}
+          sourceNamespace: {{ .Values.operator.sourceNamespace | quote }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.rhtpa.namespace }}
+  # Live PVC storage may already be Bound on the default WaitForFirstConsumer
+  # class; storageClassName is immutable (#101). Ignore that pointer so this
+  # claim stays Synced; next claim Binds Immediate and the ignore is a no-op.
+  ignoreDifferences:
+    - group: ""
+      kind: PersistentVolumeClaim
+      name: storage
+      jsonPointers:
+        - /spec/storageClassName
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+{{- end }}
+
+{{- if .Values.components.rhacs.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-rhacs
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.rhacs.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/rhacs
+    helm:
+      valuesObject:
+        rhacs:
+          enabled: {{ .Values.components.rhacs.enabled }}
+          namespace: {{ .Values.components.rhacs.namespace }}
+        operator:
+          enabled: {{ .Values.components.rhacs.installOperator }}
+          source: {{ .Values.operator.source | quote }}
+          sourceNamespace: {{ .Values.operator.sourceNamespace | quote }}
+        central:
+          enabled: {{ .Values.components.rhacs.installCentral }}
+        securedCluster:
+          enabled: {{ .Values.components.rhacs.installSecuredCluster }}
+        pipelineHooks:
+          buildNamespace: {{ .Values.components.networkPolicy.namespace | default "lw-poc-build" | quote }}
+{{- if and .Values.components.gitea.enabled .Values.deployer.domain }}
+          labRepoUrl: {{ printf "https://gitea.%s/lw-%s/%s.git" .Values.deployer.domain .Values.components.gitea.studentUsername .Values.components.gitea.repoName | quote }}
+          labPythonRepoUrl: ""
+          labRevision: {{ .Values.components.gitea.repoRevision | quote }}
+          pipeline:
+            defaultPomPath: {{ .Values.components.gitea.pomPath | quote }}
+{{- else }}
+          labRepoUrl: ""
+          labPythonRepoUrl: ""
+{{- end }}
+{{- if and .Values.components.rhtpa.enabled .Values.deployer.domain }}
+          sbom:
+            rhtpaUrl: {{ printf "https://server-%s.%s" (.Values.components.rhtpa.namespace | default "trusted-profile-analyzer") .Values.deployer.domain | quote }}
+{{- end }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.rhacs.namespace }}
+  # Preserve patched rox-api-token on rhacs-ci-secrets (Helm only manages endpoint).
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: rhacs-ci-secrets
+      jsonPointers:
+        - /data
+        - /stringData
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+{{- end }}
+
+{{- if .Values.components.admission.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-admission
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.admission.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/admission
+    helm:
+      valuesObject:
+        admission:
+          enabled: {{ .Values.components.admission.enabled }}
+          namespace: {{ .Values.components.admission.namespace }}
+        rhtas:
+          namespace: {{ .Values.components.rhtas.namespace | default "trusted-artifact-signer" }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.admission.namespace }}
+  # TUF copy Job fills fulcio_v1.crt.pem / rekor.pub; do not let Helm wipe them.
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: rhtas-tuf-keys
+      jsonPointers:
+        - /data
+        - /stringData
+    - group: ""
+      kind: ConfigMap
+      name: lab-cosign-pubkey
+      jsonPointers:
+        - /data
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+{{- end }}
+
+{{- if .Values.components.networkPolicy.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-networkpolicy
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.networkPolicy.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/networkpolicy
+    helm:
+      valuesObject:
+        networkPolicy:
+          enabled: {{ .Values.components.networkPolicy.enabled }}
+        build:
+          namespace: {{ .Values.components.networkPolicy.namespace }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.networkPolicy.namespace }}
+  # Learner tightens build-egress in 4.3. Do not let Helm restore allow-all egress.
+  ignoreDifferences:
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+      name: build-egress
+      jsonPointers:
+        - /spec
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+{{- end }}
+
+{{- if .Values.components.gitea.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-gitea
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.gitea.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/gitea
+    helm:
+      valuesObject:
+        gitea:
+          enabled: {{ .Values.components.gitea.enabled }}
+          namespace: {{ .Values.components.gitea.namespace }}
+        seed:
+          repoName: {{ .Values.components.gitea.repoName | quote }}
+          defaultBranch: {{ .Values.components.gitea.repoRevision | quote }}
+          # Operator-only clone to isolate learner app path into Gitea (not a student GitHub step)
+          source:
+            mode: live
+            repoUrl: {{ .Values.gitops.repoUrl | quote }}
+            revision: {{ .Values.gitops.revision | quote }}
+            path: automation/gitops/components/spring-boot-lw-poc/app
+{{- if .Values.student.password }}
+        student:
+          password: {{ .Values.student.password | quote }}
+{{- end }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.gitea.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+{{- end }}
+
+{{- if .Values.components.lightwellRepo.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-lightwell-repo
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.lightwellRepo.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/{{ .Values.components.lightwellRepo.chartPath }}
+    helm:
+      valuesObject:
+        lightwellRepo:
+          enabled: {{ .Values.components.lightwellRepo.enabled }}
+          namespace: {{ .Values.components.lightwellRepo.namespace }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.lightwellRepo.namespace }}
+  # Learner edits ImageSet + V2-53 stubs /data. Do not let Helm wipe them.
+  ignoreDifferences:
+{{- range $name := tuple
+  "imageset-configuration"
+  "stub-01-hummingbird-verify"
+  "stub-03-enterprise-proxy"
+  "stub-04-remediated-pin"
+  "stub-18-blast-radius"
+}}
+    - group: ""
+      kind: ConfigMap
+      name: {{ $name | quote }}
+      jsonPointers:
+        - /data
+{{- end }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+{{- end }}
+
+{{- if .Values.components.renovate.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-renovate
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.renovate.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/renovate
+    helm:
+      valuesObject:
+        renovate:
+          enabled: {{ .Values.components.renovate.enabled }}
+          namespace: {{ .Values.components.renovate.namespace }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.renovate.namespace }}
+  # Token Job fills renovate-gitea-token; do not let Helm wipe it.
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: renovate-gitea-token
+      jsonPointers:
+        - /data
+        - /stringData
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+{{- end }}
+
+{{- if .Values.components.rhdh.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-rhdh
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.rhdh.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/rhdh
+    helm:
+      valuesObject:
+        rhdh:
+          enabled: {{ .Values.components.rhdh.enabled }}
+          namespace: {{ .Values.components.rhdh.namespace }}
+        operator:
+          source: {{ .Values.operator.source | quote }}
+          sourceNamespace: {{ .Values.operator.sourceNamespace | quote }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.rhdh.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true
+{{- end }}
+
+{{- if .Values.components.springBootLwPoc.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-spring-boot-lw-poc
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.springBootLwPoc.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/{{ .Values.components.springBootLwPoc.chartPath }}
+    helm:
+      valuesObject:
+        springBootLwPoc:
+          enabled: {{ .Values.components.springBootLwPoc.enabled }}
+          namespace: {{ .Values.components.springBootLwPoc.namespace }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.springBootLwPoc.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+{{- end }}
+
+{{- if .Values.components.fastapiLwPoc.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-fastapi-lw-poc
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.fastapiLwPoc.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/{{ .Values.components.fastapiLwPoc.chartPath }}
+    helm:
+      valuesObject:
+        fastapiLwPoc:
+          enabled: {{ .Values.components.fastapiLwPoc.enabled }}
+          namespace: {{ .Values.components.fastapiLwPoc.namespace }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.fastapiLwPoc.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+{{- end }}
+
+{{- if .Values.components.parasolApp.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-parasol-app
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.parasolApp.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/{{ .Values.components.parasolApp.chartPath }}
+    helm:
+      valuesObject:
+        parasolApp:
+          enabled: {{ .Values.components.parasolApp.enabled }}
+          namespace: {{ .Values.components.parasolApp.namespace }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.parasolApp.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+{{- end }}
+
+{{- if .Values.components.validateJobs.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-validate-jobs
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.validateJobs.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/validate-jobs
+    helm:
+      valuesObject:
+        validateJobs:
+          enabled: {{ .Values.components.validateJobs.enabled }}
+          namespace: {{ .Values.components.validateJobs.namespace }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.validateJobs.namespace }}
+  # Learner edits report-* /data. Do not let Helm wipe quiz answers.
+  ignoreDifferences:
+{{- range $name := tuple
+  "report-01-hummingbird-verify"
+  "report-02-hummingbird-mirror"
+  "report-03-enterprise-proxy"
+  "report-04-remediated-pin"
+  "report-05-golden-path-source"
+  "report-06-bind-base-deps"
+  "report-07-live-renovate"
+  "report-08-forbid-list"
+  "report-09-prefetch"
+  "report-10-build-networkpolicy"
+  "report-11-build-sbom"
+  "report-12-sign-keyless"
+  "report-13-attest-conforma"
+  "report-14-disconnected-verify"
+  "report-15-gitops-admission"
+  "report-16-prod-gitops"
+  "report-17-sbom-sor"
+  "report-18-vex-acs"
+}}
+    - group: ""
+      kind: ConfigMap
+      name: {{ $name | quote }}
+      jsonPointers:
+        - /data
+{{- end }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+{{- end }}
+
+{{- if .Values.components.showroom.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-showroom
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.components.showroom.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/showroom
+    helm:
+      valuesObject:
+        showroom:
+          enabled: {{ .Values.components.showroom.enabled }}
+          namespace: {{ .Values.components.showroom.namespace }}
+          name: {{ .Values.components.showroom.name }}
+          content:
+            repoUrl: {{ .Values.components.showroom.content.repoUrl | quote }}
+            repoRef: {{ .Values.components.showroom.content.repoRef | quote }}
+            antoraPlaybook: {{ .Values.components.showroom.content.antoraPlaybook | quote }}
+            image: {{ .Values.components.showroom.content.image | quote }}
+          nookbag:
+            enabled: {{ .Values.components.showroom.nookbag.enabled }}
+            bundleUrl: {{ .Values.components.showroom.nookbag.bundleUrl | quote }}
+          terminal:
+            enabled: {{ .Values.components.showroom.terminal.enabled }}
+            image: {{ .Values.components.showroom.terminal.image | quote }}
+            labClusterAccess: {{ .Values.components.showroom.terminal.labClusterAccess | default true }}
+            resources:
+              requests:
+                cpu: {{ .Values.components.showroom.terminal.resources.requests.cpu | quote }}
+                memory: {{ .Values.components.showroom.terminal.resources.requests.memory | quote }}
+              limits:
+                cpu: {{ .Values.components.showroom.terminal.resources.limits.cpu | quote }}
+                memory: {{ .Values.components.showroom.terminal.resources.limits.memory | quote }}
+        deployer:
+          domain: {{ .Values.deployer.domain | quote }}
+          apiUrl: {{ .Values.deployer.apiUrl | quote }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.components.showroom.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+{{- end }}
