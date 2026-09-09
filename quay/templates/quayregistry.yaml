@@ -8,7 +8,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "2"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  configBundleSecret: quay-config-bundle
+  configBundleSecret: quay-config-bundle-v2
   components:
     - kind: postgres
       managed: true
@@ -18,13 +18,16 @@ spec:
       managed: true
     - kind: objectstorage
       managed: false
+    # Custom hostname requires an unmanaged Route. tls must be unmanaged too:
+    # EXTERNAL_TLS_TERMINATION in the bundle is TLS-component config, so
+    # tls:managed + that field → RolloutBlocked / no app pods.
     - kind: route
       managed: {{ if .Values.clusterSubdomain }}false{{ else }}true{{ end }}
     - kind: tls
-      managed: true
+      managed: {{ if .Values.clusterSubdomain }}false{{ else }}true{{ end }}
     - kind: horizontalpodautoscaler
       managed: false
     - kind: mirror
       managed: false
     - kind: monitoring
-      managed: true
+      managed: false

@@ -10,7 +10,7 @@ Helm charts for the hosted environment, deployed via Argo CD's app-of-apps patte
 - `rhacs-mcp-server-prereqs/` — CA copy and secrets for the ACS MCP server
 - `rhacs-mcp-ols-token/` — Lightspeed token wiring for ACS MCP
 - `rhacs-microservices-demo/` — Demo microservices scanned by ACS
-- `roadshow-prereqs/` — Cluster-wide roadshow extras (Compliance Operator, collector ConfigMap, ACME RBAC, audit retention)
+- `roadshow-prereqs/` — Cluster-wide roadshow extras (Compliance Operator, collector ConfigMap, ACME RBAC, audit retention, privileged SCC for ACS demo-apps)
 - Argo Application `roadshow-demo-apps` — recursive apply of `mfosterrox/demo-apps` `kubernetes-manifests/`
 - `lightwell-tssc/` — Nested Argo Applications for the [Lightwell TSSC workshop](https://github.com/rhpds/lightwell-tssc-workshop) (RHTAS, RHTPA, Gitea, Nexus, Pipelines, RHDH). Does not reinstall RHACS or Showroom.
 

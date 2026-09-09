@@ -1,5 +1,17 @@
 rhacsNamespace: rhacs-operator
 
+# Privileged / hostPath / SYS_ADMIN demo-apps must actually run so RHACS can
+# scan them. Bindings are cluster-scoped and do not require the namespaces yet.
+demoAppsScc:
+  enabled: true
+  serviceAccounts:
+    - name: default
+      namespace: medical
+    - name: puppet-master
+      namespace: operations
+    - name: visa-processor
+      namespace: payments
+
 compliance:
   enabled: true
   namespace: openshift-compliance

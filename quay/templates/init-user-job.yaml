@@ -36,12 +36,10 @@ spec:
               drop:
                 - ALL
           env:
+            # In-cluster service — do not wait on the public Route (503 while
+            # the app is still rolling out).
             - name: QUAY_HOST
-              {{- if .Values.clusterSubdomain }}
-              value: https://{{ .Values.routeHost | default "quay" }}.{{ .Values.clusterSubdomain }}
-              {{- else }}
               value: https://{{ .Values.registry.name }}-quay.{{ .Release.Namespace }}.svc
-              {{- end }}
             - name: QUAY_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -63,12 +61,12 @@ spec:
             - |
               set -euo pipefail
               echo "Waiting for Quay at ${QUAY_HOST}..."
-              for i in $(seq 1 90); do
+              for i in $(seq 1 180); do
                 if curl -skf "${QUAY_HOST}/api/v1/discovery" >/dev/null; then
                   echo "Quay API is reachable"
                   break
                 fi
-                echo "Attempt ${i}/90: Quay not ready"
+                echo "Attempt ${i}/180: Quay not ready"
                 sleep 10
               done
               curl -skf "${QUAY_HOST}/api/v1/discovery" >/dev/null

@@ -16,5 +16,18 @@ spec:
       # Official wordpress / juice-shop images CrashLoop on restricted-v2 and
       # are not used by the workshop labs (patient-portal, FAM, medical backend).
       exclude: '{juice-shop/**,medical-application/frontend/**}'
+  # OpenShift syncs PSA labels from the privileged SCC grant in roadshow-prereqs.
+  # Ignore those labels so selfHeal does not revert enforce=restricted.
+  ignoreDifferences:
+    - group: ""
+      kind: Namespace
+      jqPathExpressions:
+        - .metadata.labels["pod-security.kubernetes.io/enforce"]
+        - .metadata.labels["pod-security.kubernetes.io/enforce-version"]
+        - .metadata.labels["pod-security.kubernetes.io/audit"]
+        - .metadata.labels["pod-security.kubernetes.io/audit-version"]
+        - .metadata.labels["pod-security.kubernetes.io/warn"]
+        - .metadata.labels["pod-security.kubernetes.io/warn-version"]
+        - .metadata.labels["security.openshift.io/scc.podSecurityLabelSync"]
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

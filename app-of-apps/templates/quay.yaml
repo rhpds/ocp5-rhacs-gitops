@@ -22,8 +22,18 @@ spec:
   ignoreDifferences:
     - group: ""
       kind: Secret
-      name: quay-config-bundle
+      name: quay-config-bundle-v2
       jsonPointers:
         - /data
+    - group: ""
+      kind: Secret
+      name: quay-reencrypt-tls
+      jsonPointers:
+        - /data
+    - group: route.openshift.io
+      kind: Route
+      name: quay
+      jsonPointers:
+        - /spec/tls/destinationCACertificate
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

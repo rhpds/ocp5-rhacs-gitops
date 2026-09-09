@@ -16,6 +16,18 @@ spec:
       namespace: inventory
       jsonPointers:
         - /spec/template/spec/containers/0/image
+    # payments is shared with demo-apps (visa-processor). Privileged SCC grant
+    # syncs PSA labels; do not let this Application revert them.
+    - group: ""
+      kind: Namespace
+      jqPathExpressions:
+        - .metadata.labels["pod-security.kubernetes.io/enforce"]
+        - .metadata.labels["pod-security.kubernetes.io/enforce-version"]
+        - .metadata.labels["pod-security.kubernetes.io/audit"]
+        - .metadata.labels["pod-security.kubernetes.io/audit-version"]
+        - .metadata.labels["pod-security.kubernetes.io/warn"]
+        - .metadata.labels["pod-security.kubernetes.io/warn-version"]
+        - .metadata.labels["security.openshift.io/scc.podSecurityLabelSync"]
   destination:
     namespace: {{ .Values.openshiftLightspeedTroubleshooting.namespace }}
     server: https://kubernetes.default.svc

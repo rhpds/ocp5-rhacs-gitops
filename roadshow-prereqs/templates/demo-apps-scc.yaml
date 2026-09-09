@@ -1,0 +1,22 @@
+{{- if .Values.demoAppsScc.enabled }}
+# mfosterrox/demo-apps ships intentionally insecure workloads for RHACS labs
+# (privileged proxy, hostPath docker.sock on puppet-master, SYS_ADMIN +
+# privileged sidecar on visa-processor). Restricted SCC correctly denies them.
+# Grant privileged SCC so they schedule; do not "fix" the pod specs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: roadshow-demo-apps-scc-privileged
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+{{- range .Values.demoAppsScc.serviceAccounts }}
+  - kind: ServiceAccount
+    name: {{ .name }}
+    namespace: {{ .namespace }}
+{{- end }}
+{{- end }}
