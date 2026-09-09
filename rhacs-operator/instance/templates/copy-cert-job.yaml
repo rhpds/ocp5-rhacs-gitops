@@ -30,35 +30,7 @@ spec:
           args:
             - |
               set -euo pipefail
-              NAMESPACE="{{ .Release.Namespace }}"
-              echo "Copying default ingress certificate to ${NAMESPACE} namespace..."
-
-              if oc get secret central-default-tls-cert -n "${NAMESPACE}" &>/dev/null; then
-                echo "Secret central-default-tls-cert already exists, skipping"
-                exit 0
-              fi
-
-              SECRET_NAME=$(oc get deployment router-default -n openshift-ingress \
-                -o jsonpath='{.spec.template.spec.volumes[?(@.name=="default-certificate")].secret.secretName}')
-
-              if [ -z "${SECRET_NAME}" ]; then
-                echo "ERROR: Could not determine default certificate secret from router-default deployment"
-                exit 1
-              fi
-
-              echo "Found ingress certificate secret: ${SECRET_NAME}"
-
-              TLS_CRT=$(oc get secret "${SECRET_NAME}" -n openshift-ingress -o jsonpath='{.data.tls\.crt}')
-              TLS_KEY=$(oc get secret "${SECRET_NAME}" -n openshift-ingress -o jsonpath='{.data.tls\.key}')
-
-              if [ -z "${TLS_CRT}" ] || [ -z "${TLS_KEY}" ]; then
-                echo "ERROR: Could not read certificate data from secret ${SECRET_NAME} in openshift-ingress"
-                exit 1
-              fi
-
-              oc create secret tls central-default-tls-cert \
-                --cert=<(echo "${TLS_CRT}" | base64 -d) \
-                --key=<(echo "${TLS_KEY}" | base64 -d) \
-                -n "${NAMESPACE}"
-
-              echo "Certificate copied successfully"
+              echo "Skipping copy of the default ingress cert into central-default-tls-cert."
+              echo "That secret makes Central serve *.apps, and the reencrypt route then 503s"
+              echo "because the router health-checks central.<namespace>.svc."
+              exit 0
