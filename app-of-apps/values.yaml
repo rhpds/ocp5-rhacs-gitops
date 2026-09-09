@@ -83,6 +83,17 @@ kialiOssm:
   name: kiali-ossm
   namespace: istio-system
 
+roadshowPrereqs:
+  enabled: true
+  name: roadshow-prereqs
+
+demoApps:
+  enabled: true
+  name: roadshow-demo-apps
+  repoURL: https://github.com/mfosterrox/demo-apps.git
+  targetRevision: main
+  path: kubernetes-manifests
+
 
 # Custom console build — was needed for EC5 to pick up the virtualized table
 # layout fix (openshift/console#16798). Disabled since EC6 includes the fix.

@@ -1,0 +1,210 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: central-demo-config
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+data:
+  config.json: |
+{{ required "rhacs-operator/instance/files/central-config.json is missing" (.Files.Get "files/central-config.json") | indent 4 }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: central-demo-config
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: central-demo-config
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: central-demo-config
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: central-demo-config
+subjects:
+  - kind: ServiceAccount
+    name: central-demo-config
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: central-demo-config
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  backoffLimit: 12
+  template:
+    spec:
+      serviceAccountName: central-demo-config
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: configure
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CENTRAL
+              value: https://central.{{ .Release.Namespace }}.svc:443
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              NS="{{ .Release.Namespace }}"
+              echo "Waiting for Central..."
+              until curl -sk --connect-timeout 5 "${CENTRAL}/v1/ping" >/dev/null; do
+                sleep 10
+              done
+              PASSWORD=""
+              for secret in central-htpasswd central-admin-password; do
+                PASSWORD="$(oc get secret "${secret}" -n "${NS}" -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)"
+                if [ -n "${PASSWORD}" ]; then
+                  echo "Using password from secret/${secret}"
+                  break
+                fi
+              done
+              if [ -z "${PASSWORD}" ]; then
+                echo "Could not read Central admin password"
+                exit 1
+              fi
+              export PASSWORD
+              echo "Applying Central /v1/config"
+              code=$(curl -sk -o /tmp/cfg.out -w '%{http_code}' -X PUT \
+                -u "admin:${PASSWORD}" \
+                -H 'Content-Type: application/json' \
+                --data @/config/config.json \
+                "${CENTRAL}/v1/config")
+              echo "PUT /v1/config HTTP ${code}"
+              if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
+                cat /tmp/cfg.out
+                exit 1
+              fi
+              echo "Registering base image references (best effort)"
+              python3 -c '
+              import base64, json, os, ssl, urllib.request
+              password = os.environ["PASSWORD"]
+              central = os.environ["CENTRAL"]
+              ctx = ssl._create_unverified_context()
+              auth = "Basic " + base64.b64encode(("admin:" + password).encode()).decode()
+              def req(method, path, payload=None):
+                  data = None if payload is None else json.dumps(payload).encode()
+                  request = urllib.request.Request(
+                      central + path,
+                      data=data,
+                      method=method,
+                      headers={"Content-Type": "application/json", "Authorization": auth},
+                  )
+                  with urllib.request.urlopen(request, context=ctx, timeout=30) as resp:
+                      return resp.status, resp.read()
+              refs = [
+                  ("registry.access.redhat.com/hi/python", "3.13"),
+                  ("docker.io/library/python", "3.12-alpine3.20"),
+                  ("docker.io/library/python", "3.12-alpine"),
+              ]
+              try:
+                  _, body = req("GET", "/v2/baseimages")
+                  existing = json.loads(body).get("baseImageReferences") or []
+              except Exception as exc:
+                  print("list base images failed:", exc)
+                  existing = []
+              for repo, tag in refs:
+                  if any(
+                      item.get("baseImageRepoPath") == repo and item.get("baseImageTagPattern") == tag
+                      for item in existing
+                  ):
+                      print("base image already registered:", repo, tag)
+                      continue
+                  try:
+                      code, _ = req("POST", "/v2/baseimages", {"baseImageRepoPath": repo, "baseImageTagPattern": tag})
+                      print("POST /v2/baseimages", repo, tag, "HTTP", code)
+                  except Exception as exc:
+                      print("base image register failed:", repo, tag, exc)
+              ' || true
+              echo "Creating daily compliance scan schedule (best effort)"
+              python3 -c '
+              import base64, json, os, ssl, urllib.request
+              password = os.environ["PASSWORD"]
+              central = os.environ["CENTRAL"]
+              ctx = ssl._create_unverified_context()
+              auth = "Basic " + base64.b64encode(("admin:" + password).encode()).decode()
+              def req(method, path, payload=None):
+                  data = None if payload is None else json.dumps(payload).encode()
+                  request = urllib.request.Request(
+                      central + path,
+                      data=data,
+                      method=method,
+                      headers={"Content-Type": "application/json", "Authorization": auth},
+                  )
+                  with urllib.request.urlopen(request, context=ctx, timeout=60) as resp:
+                      raw = resp.read() or b"{}"
+                      return resp.status, json.loads(raw)
+              try:
+                  _, clusters = req("GET", "/v1/clusters")
+              except Exception as exc:
+                  print("clusters list failed:", exc)
+                  raise SystemExit(0)
+              cluster_list = clusters.get("clusters") or []
+              if not cluster_list:
+                  print("No secured cluster registered yet; skip scan schedule")
+                  raise SystemExit(0)
+              cluster_id = cluster_list[0].get("id") or ""
+              try:
+                  _, scans = req("GET", "/v2/compliance/scan/configurations")
+                  names = [item.get("scanName") for item in (scans.get("configurations") or [])]
+              except Exception:
+                  names = []
+              if "acs-catch-all" in names:
+                  print("Scan configuration acs-catch-all already exists")
+                  raise SystemExit(0)
+              payload = {
+                  "scanName": "acs-catch-all",
+                  "scanConfig": {
+                      "oneTimeScan": False,
+                      "profiles": ["ocp4-cis", "ocp4-cis-node", "ocp4-moderate", "ocp4-high"],
+                      "scanSchedule": {"intervalType": "DAILY", "hour": 12, "minute": 0},
+                      "description": "Daily compliance scan",
+                  },
+                  "clusters": [cluster_id],
+              }
+              try:
+                  code, _ = req("POST", "/v2/compliance/scan/configurations", payload)
+                  print("scan-config HTTP", code)
+              except Exception as exc:
+                  print("scan-config create failed:", exc)
+              ' || true
+              echo "RHACS demo configuration complete"
+      volumes:
+        - name: config
+          configMap:
+            name: central-demo-config

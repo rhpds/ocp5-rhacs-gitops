@@ -6,6 +6,9 @@ adminPassword: ""
 
 clusterSubdomain: ""
 
+collector:
+  nonAggregatedNetworks: "172.231.0.0/16"
+
 vmScanning:
   enabled: true
 

@@ -19,6 +19,17 @@ spec:
     fileActivityMonitoring:
       mode: Enabled
     taintToleration: TolerateTaints
+  # RHDP / workshop clusters use 172.231.0.0/16 for Services (not RFC1918).
+  # Without this, the network graph treats those flows as external.
+  overlays:
+    - apiVersion: apps/v1
+      kind: DaemonSet
+      name: collector
+      patches:
+        - path: spec.template.spec.containers[name:collector].env[-1]
+          value: |
+            name: ROX_NON_AGGREGATED_NETWORKS
+            value: {{ .Values.collector.nonAggregatedNetworks | default "172.231.0.0/16" | quote }}
 {{- if .Values.vmScanning.enabled }}
   customize:
     envVars:

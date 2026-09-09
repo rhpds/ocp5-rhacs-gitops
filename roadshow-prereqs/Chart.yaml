@@ -1,0 +1,5 @@
+apiVersion: v2
+name: roadshow-prereqs
+description: Cluster-wide OpenShift Security Roadshow prerequisites (not module-specific)
+type: application
+version: 0.1.0

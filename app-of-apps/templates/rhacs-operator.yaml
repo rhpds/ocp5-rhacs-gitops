@@ -21,5 +21,7 @@ spec:
           clusterName: {{ .Values.acs.clusterName }}
           adminPassword: {{ .Values.acs.adminPassword }}
           clusterSubdomain: {{ .Values.cluster.subdomain }}
+          collector:
+            nonAggregatedNetworks: "172.231.0.0/16"
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

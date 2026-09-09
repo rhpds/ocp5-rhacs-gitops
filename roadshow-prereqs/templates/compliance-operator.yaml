@@ -1,0 +1,33 @@
+{{- if .Values.compliance.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.compliance.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: compliance-operator
+  namespace: {{ .Values.compliance.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  targetNamespaces:
+    - {{ .Values.compliance.namespace }}
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: compliance-operator
+  namespace: {{ .Values.compliance.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  channel: {{ .Values.compliance.channel }}
+  installPlanApproval: {{ .Values.compliance.installPlanApproval }}
+  name: compliance-operator
+  source: {{ .Values.compliance.source }}
+  sourceNamespace: {{ .Values.compliance.sourceNamespace }}
+{{- end }}

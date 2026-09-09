@@ -1,0 +1,17 @@
+{{- if .Values.demoApps.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" .Values.demoApps.name "namespace" .Values.argocd.namespace "syncWave" "2") }}
+spec:
+  destination:
+    namespace: default
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    repoURL: {{ .Values.demoApps.repoURL }}
+    targetRevision: {{ .Values.demoApps.targetRevision }}
+    path: {{ .Values.demoApps.path }}
+    directory:
+      recurse: true
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}
+{{- end }}

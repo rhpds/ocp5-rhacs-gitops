@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-log-viewer
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes/log
+      - nodes/proxy
+      - nodes
+    verbs: ["get", "list", "create"]
+  - apiGroups: ["config.openshift.io"]
+    resources:
+      - clusterversions
+      - clusteroperators
+      - apiservers
+    verbs: ["get", "list"]

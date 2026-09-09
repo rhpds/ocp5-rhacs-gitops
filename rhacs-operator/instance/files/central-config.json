@@ -1,0 +1,71 @@
+{
+  "config": {
+    "publicConfig": {
+      "loginNotice": { "enabled": false, "text": "" },
+      "header": { "enabled": false, "text": "", "size": "UNSET", "color": "#000000", "backgroundColor": "#FFFFFF" },
+      "footer": { "enabled": false, "text": "", "size": "UNSET", "color": "#000000", "backgroundColor": "#FFFFFF" },
+      "telemetry": { "enabled": true, "lastSetTime": null }
+    },
+    "privateConfig": {
+      "alertConfig": {
+        "resolvedDeployRetentionDurationDays": 7,
+        "deletedRuntimeRetentionDurationDays": 7,
+        "allRuntimeRetentionDays": 30,
+        "attemptedDeployRetentionDurationDays": 7,
+        "attemptedRuntimeRetentionDurationDays": 7
+      },
+      "imageRetentionDurationDays": 7,
+      "expiredVulnReqRetentionDurationDays": 90,
+      "decommissionedClusterRetention": {
+        "retentionDurationDays": 0,
+        "ignoreClusterLabels": {},
+        "lastUpdated": null,
+        "createdAt": null
+      },
+      "reportRetentionConfig": {
+        "historyRetentionDurationDays": 7,
+        "downloadableReportRetentionDays": 7,
+        "downloadableReportGlobalRetentionBytes": 524288000
+      },
+      "vulnerabilityExceptionConfig": {
+        "expiryOptions": {
+          "dayOptions": [
+            { "numDays": 14, "enabled": true },
+            { "numDays": 30, "enabled": true },
+            { "numDays": 60, "enabled": true },
+            { "numDays": 90, "enabled": true }
+          ],
+          "fixableCveOptions": { "allFixable": true, "anyFixable": true },
+          "customDate": false,
+          "indefinite": false
+        }
+      },
+      "administrationEventsConfig": { "retentionDurationDays": 4 },
+      "metrics": {
+        "imageVulnerabilities": {
+          "gatheringPeriodMinutes": 1,
+          "descriptors": {
+            "cve_severity": { "labels": ["Cluster", "CVE", "IsPlatformWorkload", "IsFixable", "Severity"] },
+            "deployment_severity": { "labels": ["Cluster", "Namespace", "Deployment", "IsPlatformWorkload", "IsFixable", "Severity"] },
+            "namespace_severity": { "labels": ["Cluster", "Namespace", "IsPlatformWorkload", "IsFixable", "Severity"] }
+          }
+        },
+        "policyViolations": {
+          "gatheringPeriodMinutes": 1,
+          "descriptors": {
+            "deployment_severity": { "labels": ["Cluster", "Namespace", "Deployment", "IsPlatformComponent", "Action", "Severity"] },
+            "namespace_severity": { "labels": ["Cluster", "Namespace", "IsPlatformComponent", "Action", "Severity"] }
+          }
+        },
+        "nodeVulnerabilities": {
+          "gatheringPeriodMinutes": 1,
+          "descriptors": {
+            "component_severity": { "labels": ["Cluster", "Node", "Component", "IsFixable", "Severity"] },
+            "cve_severity": { "labels": ["Cluster", "CVE", "IsFixable", "Severity"] },
+            "node_severity": { "labels": ["Cluster", "Node", "IsFixable", "Severity"] }
+          }
+        }
+      }
+    }
+  }
+}

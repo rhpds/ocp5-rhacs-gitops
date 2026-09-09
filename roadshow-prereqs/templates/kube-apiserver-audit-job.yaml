@@ -1,0 +1,76 @@
+{{- if .Values.auditLog.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: roadshow-apiserver-audit
+  namespace: {{ .Values.rhacsNamespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: roadshow-apiserver-audit
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+rules:
+  - apiGroups: ["operator.openshift.io"]
+    resources: ["kubeapiservers"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: roadshow-apiserver-audit
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: roadshow-apiserver-audit
+subjects:
+  - kind: ServiceAccount
+    name: roadshow-apiserver-audit
+    namespace: {{ .Values.rhacsNamespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: roadshow-apiserver-audit
+  namespace: {{ .Values.rhacsNamespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      serviceAccountName: roadshow-apiserver-audit
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: patch
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              oc patch kubeapiserver cluster --type merge -p '{
+                "spec": {
+                  "unsupportedConfigOverrides": {
+                    "apiServerArguments": {
+                      "audit-log-maxsize": ["{{ .Values.auditLog.maxSize }}"],
+                      "audit-log-maxbackup": ["{{ .Values.auditLog.maxBackup }}"]
+                    }
+                  }
+                }
+              }'
+              echo "KubeAPIServer audit retention patched"
+{{- end }}

@@ -1,0 +1,18 @@
+rhacsNamespace: rhacs-operator
+
+compliance:
+  enabled: true
+  namespace: openshift-compliance
+  channel: stable
+  installPlanApproval: Automatic
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+
+auditLog:
+  enabled: true
+  maxSize: "2048"
+  maxBackup: "3"
+
+collector:
+  externalIps: true
+  nonAggregatedNetworks: "172.231.0.0/16"

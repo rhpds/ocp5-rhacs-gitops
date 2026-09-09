@@ -1,0 +1,130 @@
+{{- if .Values.compliance.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: roadshow-sensor-co-kick
+  namespace: {{ .Values.rhacsNamespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: roadshow-sensor-co-kick
+  namespace: {{ .Values.rhacsNamespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: roadshow-sensor-co-kick
+  namespace: {{ .Values.rhacsNamespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: roadshow-sensor-co-kick
+subjects:
+  - kind: ServiceAccount
+    name: roadshow-sensor-co-kick
+    namespace: {{ .Values.rhacsNamespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: roadshow-sensor-co-kick
+  namespace: {{ .Values.compliance.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: roadshow-sensor-co-kick
+  namespace: {{ .Values.compliance.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: roadshow-sensor-co-kick
+subjects:
+  - kind: ServiceAccount
+    name: roadshow-sensor-co-kick
+    namespace: {{ .Values.rhacsNamespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: roadshow-sensor-co-kick
+  namespace: {{ .Values.rhacsNamespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  backoffLimit: 20
+  template:
+    spec:
+      serviceAccountName: roadshow-sensor-co-kick
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kick
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              ACS_NS="{{ .Values.rhacsNamespace }}"
+              CO_NS="{{ .Values.compliance.namespace }}"
+              MARKER="roadshow-sensor-co-kick"
+              if oc -n "${ACS_NS}" get configmap "${MARKER}" >/dev/null 2>&1; then
+                echo "Sensor already restarted for Compliance Operator discovery"
+                exit 0
+              fi
+              echo "Waiting for Compliance Operator..."
+              for i in $(seq 1 60); do
+                if oc -n "${CO_NS}" get deploy compliance-operator >/dev/null 2>&1; then
+                  if oc -n "${CO_NS}" wait --for=condition=available --timeout=15s deploy/compliance-operator >/dev/null 2>&1; then
+                    break
+                  fi
+                fi
+                if [ "${i}" -eq 60 ]; then
+                  echo "Compliance Operator not available yet; will retry"
+                  exit 1
+                fi
+                sleep 10
+              done
+              if ! oc -n "${ACS_NS}" get pods -l app.kubernetes.io/component=sensor --no-headers 2>/dev/null | grep -q .; then
+                echo "No Sensor pods in ${ACS_NS}; skip restart"
+                oc -n "${ACS_NS}" create configmap "${MARKER}" --from-literal=status=skipped-no-sensor
+                exit 0
+              fi
+              echo "Restarting RHACS Sensor so it discovers Compliance Operator profiles"
+              oc -n "${ACS_NS}" delete pods -l app.kubernetes.io/component=sensor --wait=false
+              oc -n "${ACS_NS}" create configmap "${MARKER}" --from-literal=status=restarted
+              echo "Sensor restart requested"
+{{- end }}
