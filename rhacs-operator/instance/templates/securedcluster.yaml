@@ -45,4 +45,7 @@ spec:
     envVars:
       - name: ROX_VIRTUAL_MACHINES
         value: "true"
+      # Default scrape is ~1h; workshops need the prebuilt VM to show up quickly.
+      - name: ROX_VIRTUAL_MACHINES_SCRAPER_POLL_INTERVAL
+        value: "1m"
 {{- end }}

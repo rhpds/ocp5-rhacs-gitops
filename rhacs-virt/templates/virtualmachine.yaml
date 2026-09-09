@@ -12,7 +12,12 @@ spec:
     metadata:
       labels:
         kubevirt.io/domain: {{ .Values.vm.name }}
+      annotations:
+        # Bump to recreate the VMI so cloud-init installs pull-mode roxagent serve.
+        rhacs.demo/agent: pull-serve-v1
     spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
       domain:
         cpu:
           cores: 2

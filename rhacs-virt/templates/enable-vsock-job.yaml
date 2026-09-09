@@ -26,11 +26,13 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
+              set -euo pipefail
               echo "Checking VSOCK feature gate..."
-              CURRENT=$(oc get kubevirt kubevirt-kubevirt-hyperconverged -n openshift-cnv -o json | \
-                python3 -c "import sys,json; gates=json.load(sys.stdin).get('spec',{}).get('configuration',{}).get('developerConfiguration',{}).get('featureGates',[]); print('VSOCK' in gates)")
+              GATES=$(oc get kubevirt kubevirt-kubevirt-hyperconverged -n openshift-cnv \
+                -o jsonpath='{.spec.configuration.developerConfiguration.featureGates[*]}' 2>/dev/null || true)
+              echo "Current featureGates: ${GATES:-<none>}"
 
-              if [ "$CURRENT" = "True" ]; then
+              if echo " ${GATES} " | grep -q " VSOCK "; then
                 echo "VSOCK feature gate already enabled"
                 exit 0
               fi

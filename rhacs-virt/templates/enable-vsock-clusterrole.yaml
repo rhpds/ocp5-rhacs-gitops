@@ -9,3 +9,6 @@ rules:
   - apiGroups: ["hco.kubevirt.io"]
     resources: ["hyperconvergeds"]
     verbs: ["get", "patch"]
+  - apiGroups: ["kubevirt.io"]
+    resources: ["kubevirts"]
+    verbs: ["get", "list"]
