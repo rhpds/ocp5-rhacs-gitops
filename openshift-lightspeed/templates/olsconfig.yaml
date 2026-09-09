@@ -37,30 +37,13 @@ spec:
     maxIterations: 30
     defaultModel: {{ .Values.llm.model }}
     defaultProvider: {{ .Values.llm.provider }}
-    deployment:
+    deployment: 
       alertsAdapter:
         configMapRef:
           name: alerts-adapter-config
-      api:
-        replicas: 1
-        resources:
-          requests:
-            cpu: 250m
-            memory: 1Gi
-          limits:
-            cpu: "2"
-            memory: 4Gi
-      database:
-        resources:
-          requests:
-            cpu: 100m
-            memory: 512Mi
-          limits:
-            cpu: "1"
-            memory: 2Gi
     conversationCache:
       type: postgres
       postgres:
-        sharedBuffers: 128MB
-        maxConnections: 100
+        sharedBuffers: 256MB
+        maxConnections: 2000
 {{- end }}
