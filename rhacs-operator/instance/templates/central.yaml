@@ -27,8 +27,11 @@ spec:
     adminPasswordSecret:
       name: central-admin-password
 {{- end }}
-    defaultTLSSecret:
-      name: central-default-tls-cert
+    # Do not set defaultTLSSecret to the cluster wildcard cert. That cert's
+    # SAN is *.apps.<cluster> and the router health-checks Central as
+    # central.<ns>.svc, so the reencrypt route (needed to iframe ACS in
+    # Showroom) returns 503. The router already presents a trusted cert to
+    # the browser on reencrypt.
     persistence:
       persistentVolumeClaim:
         claimName: stackrox-db
