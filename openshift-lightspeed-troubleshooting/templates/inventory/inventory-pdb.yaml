@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/part-of: inventory-system
 spec:
   minAvailable: {{ .Values.inventory.pdb.minAvailable }}
+  unhealthyPodEvictionPolicy: AlwaysAllow
   selector:
     matchLabels:
       app: inventory-app

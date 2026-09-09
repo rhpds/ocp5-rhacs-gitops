@@ -1,0 +1,21 @@
+# Dummy webhook so AlertmanagerReceiversNotConfigured stops firing.
+# Routes nothing real (only a synthetic alertname).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: workshop-blackhole
+  namespace: openshift-monitoring
+  labels:
+    app.kubernetes.io/part-of: ocp5-rhacs-roadshow
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  route:
+    receiver: blackhole
+    match:
+      alertname: WorkshopBlackholeNeverFires
+  receivers:
+    - name: blackhole
+      webhookConfigs:
+        - url: http://127.0.0.1:9
+          sendResolved: false

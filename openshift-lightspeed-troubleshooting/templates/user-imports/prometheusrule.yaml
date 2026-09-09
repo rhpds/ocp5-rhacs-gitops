@@ -9,13 +9,7 @@ spec:
       rules:
         - alert: UserImportPodNotScheduled
           expr: |
-            kube_pod_status_unschedulable{namespace="user-imports"} == 1
-            or
-            (
-              kube_pod_status_phase{namespace="user-imports", phase="Pending"} == 1
-              unless
-              kube_pod_status_phase{namespace="user-imports", phase="Running"} == 1
-            )
+            kube_pod_status_phase{namespace="user-imports", phase="Pending"} == 1
           for: 1m
           labels:
             severity: warning

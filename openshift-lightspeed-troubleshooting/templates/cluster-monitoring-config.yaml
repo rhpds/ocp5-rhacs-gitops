@@ -3,6 +3,11 @@ kind: ConfigMap
 metadata:
   name: cluster-monitoring-config
   namespace: openshift-monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 data:
   config.yaml: |
     enableUserWorkload: true
+    alertmanagerMain:
+      enableAlertmanagerConfig: true

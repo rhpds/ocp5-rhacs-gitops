@@ -6,8 +6,10 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "0"
     argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
 spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 120
   template:
     spec:
       serviceAccountName: enable-vsock
@@ -27,19 +29,38 @@ spec:
           args:
             - |
               set -euo pipefail
+              HCO_NS=openshift-cnv
+              HCO=kubevirt-hyperconverged
+
               echo "Checking VSOCK feature gate..."
-              GATES=$(oc get kubevirt kubevirt-kubevirt-hyperconverged -n openshift-cnv \
+              GATES=$(oc get kubevirt kubevirt-kubevirt-hyperconverged -n "${HCO_NS}" \
                 -o jsonpath='{.spec.configuration.developerConfiguration.featureGates[*]}' 2>/dev/null || true)
               echo "Current featureGates: ${GATES:-<none>}"
 
               if echo " ${GATES} " | grep -q " VSOCK "; then
                 echo "VSOCK feature gate already enabled"
-                exit 0
+              else
+                echo "Enabling VSOCK via HyperConverged annotation..."
+                oc annotate hyperconverged "${HCO}" -n "${HCO_NS}" \
+                  'kubevirt.kubevirt.io/jsonpatch=[{"op":"add","path":"/spec/configuration/developerConfiguration/featureGates/-","value":"VSOCK"}]' \
+                  --overwrite
+                echo "VSOCK feature gate enabled"
               fi
 
-              echo "Enabling VSOCK via HyperConverged annotation..."
-              oc annotate hyperconverged kubevirt-hyperconverged -n openshift-cnv \
-                'kubevirt.kubevirt.io/jsonpatch=[{"op":"add","path":"/spec/configuration/developerConfiguration/featureGates/-","value":"VSOCK"}]' \
-                --overwrite
-
-              echo "VSOCK feature gate enabled"
+              # Workshop VMs use containerDisk, not HCO golden images.
+              # OCP 4.19+: spec.enableCommonBootImageImport
+              # OCP 4.18:  spec.featureGates.enableCommonBootImageImport
+              echo "Disabling common boot image import..."
+              if oc patch hyperconverged "${HCO}" -n "${HCO_NS}" --type json \
+                -p '[{"op":"replace","path":"/spec/enableCommonBootImageImport","value":false}]' 2>/dev/null \
+                || oc patch hyperconverged "${HCO}" -n "${HCO_NS}" --type json \
+                -p '[{"op":"add","path":"/spec/enableCommonBootImageImport","value":false}]' 2>/dev/null; then
+                echo "Set spec.enableCommonBootImageImport=false"
+              elif oc patch hyperconverged "${HCO}" -n "${HCO_NS}" --type json \
+                -p '[{"op":"replace","path":"/spec/featureGates/enableCommonBootImageImport","value":false}]' 2>/dev/null \
+                || oc patch hyperconverged "${HCO}" -n "${HCO_NS}" --type json \
+                -p '[{"op":"add","path":"/spec/featureGates/enableCommonBootImageImport","value":false}]' 2>/dev/null; then
+                echo "Set spec.featureGates.enableCommonBootImageImport=false"
+              else
+                echo "Could not disable common boot image import (non-fatal)"
+              fi

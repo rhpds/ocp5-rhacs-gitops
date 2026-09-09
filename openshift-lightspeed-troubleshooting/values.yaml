@@ -1,5 +1,7 @@
 inventory:
   replicas: 3
+  # Intentional typo for the Lightspeed troubleshooting lab (ImagePullBackOff).
   image: registry.redhat.io/ubi9/ubi:laetst
   pdb:
-    minAvailable: 2
+    # minAvailable: 2 with a non-running lab image trips PodDisruptionBudgetLimit.
+    minAvailable: 0
