@@ -25,6 +25,13 @@ spec:
         keycloak:
           enabled: {{ .Values.components.keycloak.enabled }}
           namespace: {{ .Values.components.keycloak.namespace }}
+          resources:
+            requests:
+              cpu: {{ .Values.resources.keycloak.cpu | quote }}
+              memory: {{ .Values.resources.keycloak.memoryRequest | quote }}
+            limits:
+              cpu: "1"
+              memory: {{ .Values.resources.keycloak.memoryLimit | quote }}
         deployer:
           domain: {{ .Values.deployer.domain | quote }}
           apiUrl: {{ .Values.deployer.apiUrl | quote }}
@@ -152,6 +159,12 @@ spec:
         operator:
           source: {{ .Values.operator.source | quote }}
           sourceNamespace: {{ .Values.operator.sourceNamespace | quote }}
+        trustedProfileAnalyzer:
+          server:
+            resources:
+              requests:
+                cpu: {{ .Values.resources.rhtpa.cpu | quote }}
+                memory: {{ .Values.resources.rhtpa.memory | quote }}
         deployer:
           domain: {{ .Values.deployer.domain | quote }}
           apiUrl: {{ .Values.deployer.apiUrl | quote }}
@@ -431,6 +444,15 @@ spec:
         lightwellRepo:
           enabled: {{ .Values.components.lightwellRepo.enabled }}
           namespace: {{ .Values.components.lightwellRepo.namespace }}
+        nexus:
+          resources:
+            requests:
+              cpu: {{ .Values.resources.nexus.cpu | quote }}
+              memory: {{ .Values.resources.nexus.memoryRequest | quote }}
+            limits:
+              cpu: "1"
+              memory: {{ .Values.resources.nexus.memoryLimit | quote }}
+          javaOpts: {{ .Values.resources.nexus.javaOpts | quote }}
         deployer:
           domain: {{ .Values.deployer.domain | quote }}
           apiUrl: {{ .Values.deployer.apiUrl | quote }}

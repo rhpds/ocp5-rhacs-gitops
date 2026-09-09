@@ -17,7 +17,7 @@ spec:
         reencrypt:
           enabled: true
 {{- if .Values.clusterSubdomain }}
-          host: central-reencrypt-stackrox.{{ .Values.clusterSubdomain }}
+          host: {{ .Values.routeHost | default "central-reencrypt-stackrox" }}.{{ .Values.clusterSubdomain }}
 {{- end }}
       loadBalancer:
         enabled: false
@@ -35,6 +35,23 @@ spec:
     persistence:
       persistentVolumeClaim:
         claimName: stackrox-db
+    # Workshop workers cannot hold default ACS HA requests plus one node loss
+    # (KubeMemoryOvercommit). Keep limits high enough for labs; cut requests.
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+    db:
+      resources:
+        requests:
+          cpu: 250m
+          memory: 2Gi
+        limits:
+          cpu: "1"
+          memory: 4Gi
 {{- if .Values.vmScanning.enabled }}
   customize:
     envVars:
@@ -50,8 +67,57 @@ spec:
   scanner:
     analyzer:
       scaling:
-        autoScaling: Enabled
-        maxReplicas: 5
-        minReplicas: 2
-        replicas: 3
+        autoScaling: Disabled
+        maxReplicas: 1
+        minReplicas: 1
+        replicas: 1
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1500Mi
+        limits:
+          cpu: "1"
+          memory: 3Gi
+    db:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          memory: 1Gi
     scannerComponent: Enabled
+  scannerV4:
+    indexer:
+      scaling:
+        autoScaling: Disabled
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 1
+      resources:
+        requests:
+          cpu: 500m
+          memory: 2Gi
+        limits:
+          cpu: "1"
+          memory: 4Gi
+    matcher:
+      scaling:
+        autoScaling: Disabled
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 1
+      resources:
+        requests:
+          cpu: 500m
+          memory: 2Gi
+        limits:
+          cpu: "1"
+          memory: 4Gi
+    db:
+      resources:
+        requests:
+          cpu: 250m
+          memory: 2Gi
+        limits:
+          cpu: "1"
+          memory: 4Gi

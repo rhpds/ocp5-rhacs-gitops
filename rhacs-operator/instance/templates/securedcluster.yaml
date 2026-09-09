@@ -12,6 +12,16 @@ spec:
     listenOnCreates: true
     listenOnEvents: true
     listenOnUpdates: true
+    replicas: 2
+  # Default Sensor request is 4Gi; workshop workers cannot spare that plus Central HA.
+  sensor:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
   perNode:
     collector:
       collection: EBPF

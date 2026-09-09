@@ -21,6 +21,21 @@ deployer:
   domain: ""
   apiUrl: ""
 
+# Standing requests sized for RHDP workers (KubeMemoryOvercommit / one-node loss).
+resources:
+  rhtpa:
+    cpu: "250m"
+    memory: 2Gi
+  nexus:
+    cpu: 250m
+    memoryRequest: 1Gi
+    memoryLimit: 2Gi
+    javaOpts: "-Xms512m -Xmx768m -XX:MaxDirectMemorySize=512m"
+  keycloak:
+    cpu: 250m
+    memoryRequest: 512Mi
+    memoryLimit: 1Gi
+
 # Optional. When set (RHDP common_password), Gitea student matches the cluster password.
 student:
   password: ""
