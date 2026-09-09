@@ -5,6 +5,7 @@ clusterName: local-cluster
 adminPassword: ""
 
 clusterSubdomain: ""
+routeHost: central-reencrypt-stackrox
 
 collector:
   nonAggregatedNetworks: "172.231.0.0/16"

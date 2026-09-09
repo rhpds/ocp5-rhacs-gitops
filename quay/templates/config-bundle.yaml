@@ -19,7 +19,7 @@ stringData:
     PREFERRED_URL_SCHEME: https
     EXTERNAL_TLS_TERMINATION: true
     {{- if .Values.clusterSubdomain }}
-    SERVER_HOSTNAME: quay.{{ .Values.clusterSubdomain }}
+    SERVER_HOSTNAME: {{ .Values.routeHost | default "quay" }}.{{ .Values.clusterSubdomain }}
     {{- end }}
     DISTRIBUTED_STORAGE_DEFAULT_LOCATIONS: []
     DISTRIBUTED_STORAGE_PREFERENCE:

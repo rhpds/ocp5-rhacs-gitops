@@ -13,6 +13,7 @@ adminPassword: ""
 adminEmail: admin@example.com
 
 clusterSubdomain: ""
+routeHost: quay
 
 minio:
   rootUser: minio

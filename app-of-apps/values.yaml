@@ -26,6 +26,8 @@ acs:
   namespace: rhacs-operator
   clusterName: local-cluster
   adminPassword: ""
+  # Must match ocp5_rhacs_acs_route_host and Showroom ui-config.yml / UserInfo acs_route
+  routeHost: central-reencrypt-stackrox
 
 acsVirt:
   enabled: true
@@ -72,6 +74,8 @@ quay:
   name: quay
   namespace: quay
   adminUsername: admin
+  # Must match ocp5_rhacs_quay_route_host and Showroom UserInfo quay_url
+  routeHost: quay
 
 mockMcpServers:
   enabled: true

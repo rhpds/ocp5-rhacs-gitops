@@ -16,6 +16,7 @@ spec:
         subscription:
           source: {{ include "app-of-apps.operatorSource" . }}
         clusterSubdomain: {{ .Values.cluster.subdomain | quote }}
+        routeHost: {{ .Values.quay.routeHost | default "quay" | quote }}
         adminUsername: {{ .Values.quay.adminUsername | quote }}
         adminPassword: {{ .Values.common.password | quote }}
   ignoreDifferences:

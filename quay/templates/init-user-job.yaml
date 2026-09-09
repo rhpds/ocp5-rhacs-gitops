@@ -38,7 +38,7 @@ spec:
           env:
             - name: QUAY_HOST
               {{- if .Values.clusterSubdomain }}
-              value: https://quay.{{ .Values.clusterSubdomain }}
+              value: https://{{ .Values.routeHost | default "quay" }}.{{ .Values.clusterSubdomain }}
               {{- else }}
               value: https://{{ .Values.registry.name }}-quay.{{ .Release.Namespace }}.svc
               {{- end }}

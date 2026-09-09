@@ -8,7 +8,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "2"
 spec:
-  host: quay.{{ .Values.clusterSubdomain }}
+  host: {{ .Values.routeHost | default "quay" }}.{{ .Values.clusterSubdomain }}
   to:
     kind: Service
     name: {{ .Values.registry.name }}-quay
