@@ -13,5 +13,8 @@ spec:
     path: {{ .Values.demoApps.path }}
     directory:
       recurse: true
+      # Official wordpress / juice-shop images CrashLoop on restricted-v2 and
+      # are not used by the workshop labs (patient-portal, FAM, medical backend).
+      exclude: '{juice-shop/**,medical-application/frontend/**}'
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}
