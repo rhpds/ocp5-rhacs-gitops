@@ -36,7 +36,8 @@ resources:
     memoryRequest: 1Gi
     memoryLimit: 2Gi
 
-# Optional. When set (RHDP common_password), Gitea student matches the cluster password.
+# Optional. When set (RHDP common_password), Gitea student and TSSC Keycloak
+# workshop users match the cluster password shown on the Showroom Welcome page.
 student:
   password: ""
 
@@ -45,6 +46,10 @@ components:
     enabled: true
     namespace: sso
     syncWave: "5"
+    # RHDP authentication already owns sso.<domain> (RHBK, realm keycloak).
+    # TSSC Keycloak must use a distinct Route host or /realms/tpa 404s.
+    routeHostPrefix: sso-tpa
+    realm: tpa
 
   pipelines:
     enabled: true

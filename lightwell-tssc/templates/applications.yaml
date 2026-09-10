@@ -25,6 +25,7 @@ spec:
         keycloak:
           enabled: {{ .Values.components.keycloak.enabled }}
           namespace: {{ .Values.components.keycloak.namespace }}
+          routeHostPrefix: {{ .Values.components.keycloak.routeHostPrefix | default "sso-tpa" | quote }}
           resources:
             requests:
               cpu: {{ .Values.resources.keycloak.cpu | quote }}
@@ -32,6 +33,14 @@ spec:
             limits:
               cpu: "1"
               memory: {{ .Values.resources.keycloak.memoryLimit | quote }}
+{{- if .Values.student.password }}
+          admin:
+            password: {{ .Values.student.password | quote }}
+        oidc:
+          realm: {{ .Values.components.keycloak.realm | default "tpa" | quote }}
+          workshopUser:
+            password: {{ .Values.student.password | quote }}
+{{- end }}
         deployer:
           domain: {{ .Values.deployer.domain | quote }}
           apiUrl: {{ .Values.deployer.apiUrl | quote }}
@@ -165,6 +174,11 @@ spec:
               requests:
                 cpu: {{ .Values.resources.rhtpa.cpu | quote }}
                 memory: {{ .Values.resources.rhtpa.memory | quote }}
+{{- if and .Values.deployer.domain .Values.components.keycloak.enabled }}
+        oidc:
+          realm: {{ .Values.components.keycloak.realm | default "tpa" | quote }}
+          issuerURL: {{ printf "https://%s.%s/realms/%s" (.Values.components.keycloak.routeHostPrefix | default "sso-tpa") .Values.deployer.domain (.Values.components.keycloak.realm | default "tpa") | quote }}
+{{- end }}
         deployer:
           domain: {{ .Values.deployer.domain | quote }}
           apiUrl: {{ .Values.deployer.apiUrl | quote }}
