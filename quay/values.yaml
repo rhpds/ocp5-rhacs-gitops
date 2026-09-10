@@ -12,8 +12,9 @@ adminUsername: admin
 adminPassword: ""
 adminEmail: admin@example.com
 
-clusterSubdomain: ""
-routeHost: quay
+# Operator-managed Route host is {name}-quay-{namespace}.{appsDomain}
+# → registry-quay-quay.<cluster subdomain>. Do not set a custom hostname;
+# that requires unmanaged TLS and blocked registry-quay-app-upgrade.
 
 minio:
   rootUser: minio

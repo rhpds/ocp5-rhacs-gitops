@@ -8,7 +8,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "2"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  configBundleSecret: quay-config-bundle-v2
+  configBundleSecret: quay-config-bundle-v3
   components:
     - kind: postgres
       managed: true
@@ -18,13 +18,14 @@ spec:
       managed: true
     - kind: objectstorage
       managed: false
-    # Custom hostname requires an unmanaged Route. tls must be unmanaged too:
-    # EXTERNAL_TLS_TERMINATION in the bundle is TLS-component config, so
-    # tls:managed + that field → RolloutBlocked / no app pods.
+    # Opinionated Operator Route + TLS (edge, cluster wildcard).
+    # A custom hostname requires unmanaged route+tls and ssl.cert/ssl.key;
+    # that combination left registry-quay-app-upgrade in Error and the
+    # public Route on HTTP 503.
     - kind: route
-      managed: {{ if .Values.clusterSubdomain }}false{{ else }}true{{ end }}
+      managed: true
     - kind: tls
-      managed: {{ if .Values.clusterSubdomain }}false{{ else }}true{{ end }}
+      managed: true
     - kind: horizontalpodautoscaler
       managed: false
     - kind: mirror

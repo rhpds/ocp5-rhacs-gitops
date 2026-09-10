@@ -1,13 +1,11 @@
-{{- include "quay.initTLS" . }}
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: quay-config-bundle-v2
+  name: quay-config-bundle-v3
   namespace: {{ .Release.Namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
-    argocd.argoproj.io/sync-options: Prune=false
 type: Opaque
 stringData:
   config.yaml: |
@@ -17,11 +15,6 @@ stringData:
       - {{ .Values.adminUsername }}
     FEATURE_USER_CREATION: false
     FEATURE_ANONYMOUS_ACCESS: false
-    PREFERRED_URL_SCHEME: https
-    EXTERNAL_TLS_TERMINATION: true
-    {{- if .Values.clusterSubdomain }}
-    SERVER_HOSTNAME: {{ include "quay.serverHostname" . }}
-    {{- end }}
     DISTRIBUTED_STORAGE_DEFAULT_LOCATIONS: []
     DISTRIBUTED_STORAGE_PREFERENCE:
       - default
@@ -35,56 +28,6 @@ stringData:
           bucket_name: {{ .Values.minio.bucket }}
           access_key: {{ .Values.minio.rootUser }}
           secret_key: {{ .Values.minio.rootPassword }}
-          s3_region: us-east-1
-  {{- if .Values.clusterSubdomain }}
-  ssl.cert: |
-{{ .quayTLSCert | indent 4 }}
-  ssl.key: |
-{{ .quayTLSKey | indent 4 }}
-  {{- end }}
-{{- if .Values.clusterSubdomain }}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: quay-reencrypt-tls
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
-    argocd.argoproj.io/sync-options: Prune=false
-type: Opaque
-stringData:
-  ca.crt: |
-{{ .quayCACert | indent 4 }}
-  tls.crt: |
-{{ .quayTLSCert | indent 4 }}
-  tls.key: |
-{{ .quayTLSKey | indent 4 }}
-{{- end }}
-{{- if .Values.clusterSubdomain }}
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: quay
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"
-spec:
-  host: {{ include "quay.serverHostname" . }}
-  to:
-    kind: Service
-    name: {{ .Values.registry.name }}-quay
-    weight: 100
-  port:
-    targetPort: https
-  tls:
-    termination: reencrypt
-    insecureEdgeTerminationPolicy: Redirect
-    destinationCACertificate: |
-{{ .quayCACert | indent 6 }}
-  wildcardPolicy: None
-{{- end }}
 {{- if .Values.adminPassword }}
 ---
 apiVersion: v1

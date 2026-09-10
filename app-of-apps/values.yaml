@@ -74,8 +74,7 @@ quay:
   name: quay
   namespace: quay
   adminUsername: admin
-  # Must match ocp5_rhacs_quay_route_host and Showroom UserInfo quay_url
-  routeHost: quay
+  # Operator-managed host prefix: registry-quay-quay.<cluster subdomain>
 
 mockMcpServers:
   enabled: true

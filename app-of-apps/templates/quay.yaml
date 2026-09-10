@@ -15,25 +15,7 @@ spec:
       valuesObject:
         subscription:
           source: {{ include "app-of-apps.operatorSource" . }}
-        clusterSubdomain: {{ .Values.cluster.subdomain | quote }}
-        routeHost: {{ .Values.quay.routeHost | default "quay" | quote }}
         adminUsername: {{ .Values.quay.adminUsername | quote }}
         adminPassword: {{ .Values.common.password | quote }}
-  ignoreDifferences:
-    - group: ""
-      kind: Secret
-      name: quay-config-bundle-v2
-      jsonPointers:
-        - /data
-    - group: ""
-      kind: Secret
-      name: quay-reencrypt-tls
-      jsonPointers:
-        - /data
-    - group: route.openshift.io
-      kind: Route
-      name: quay
-      jsonPointers:
-        - /spec/tls/destinationCACertificate
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

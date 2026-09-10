@@ -36,10 +36,8 @@ spec:
               drop:
                 - ALL
           env:
-            # In-cluster service — do not wait on the public Route (503 while
-            # the app is still rolling out).
-            - name: QUAY_HOST
-              value: https://{{ .Values.registry.name }}-quay.{{ .Release.Namespace }}.svc
+            - name: QUAY_SVC
+              value: {{ .Values.registry.name }}-quay.{{ .Release.Namespace }}.svc
             - name: QUAY_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -60,16 +58,23 @@ spec:
             - -c
             - |
               set -euo pipefail
-              echo "Waiting for Quay at ${QUAY_HOST}..."
+              echo "Waiting for Quay at ${QUAY_SVC}..."
+              QUAY_HOST=""
               for i in $(seq 1 180); do
-                if curl -skf "${QUAY_HOST}/api/v1/discovery" >/dev/null; then
-                  echo "Quay API is reachable"
-                  break
-                fi
+                for url in "http://${QUAY_SVC}:8080" "http://${QUAY_SVC}" "https://${QUAY_SVC}"; do
+                  if curl -skf "${url}/api/v1/discovery" >/dev/null; then
+                    QUAY_HOST="${url}"
+                    echo "Quay API is reachable at ${QUAY_HOST}"
+                    break 2
+                  fi
+                done
                 echo "Attempt ${i}/180: Quay not ready"
                 sleep 10
               done
-              curl -skf "${QUAY_HOST}/api/v1/discovery" >/dev/null
+              if [ -z "${QUAY_HOST}" ]; then
+                echo "Quay API never became reachable"
+                exit 1
+              fi
 
               PAYLOAD=$(python3 -c 'import json,os; print(json.dumps({"username":os.environ["QUAY_USERNAME"],"password":os.environ["QUAY_PASSWORD"],"email":os.environ["QUAY_EMAIL"],"access_token": True}))')
               HTTP_CODE=$(curl -sk -o /tmp/quay-init.json -w "%{http_code}" \
