@@ -34,5 +34,11 @@ spec:
             installOperator: false
             installCentral: false
             installSecuredCluster: false
+  ignoreDifferences:
+    - group: ""
+      kind: ConfigMap
+      name: report-00-check-demo
+      jsonPointers:
+        - /data
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}
