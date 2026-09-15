@@ -13,8 +13,8 @@ spec:
       labels:
         kubevirt.io/domain: {{ .Values.vm.name }}
       annotations:
-        # Bump to recreate the VMI so cloud-init installs pull-mode roxagent serve.
-        rhacs.demo/agent: pull-serve-v1
+        # Bump to recreate the VMI so cloud-init re-runs (host-path / + Satellite).
+        rhacs.demo/agent: pull-serve-v2-hostpath-root
     spec:
       nodeSelector:
         node-role.kubernetes.io/worker: ""
