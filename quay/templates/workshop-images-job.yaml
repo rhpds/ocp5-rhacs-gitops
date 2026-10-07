@@ -1,0 +1,169 @@
+{{- if .Values.workshopImages.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workshop-images
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workshop-images
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["quay-admin-password"]
+    verbs: ["get"]
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workshop-images
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: workshop-images
+subjects:
+  - kind: ServiceAccount
+    name: workshop-images
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workshop-images-privileged
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+  - kind: ServiceAccount
+    name: workshop-images
+    namespace: {{ .Release.Namespace }}
+---
+# Push the workshop base and frontend images. New Quay repositories stay
+# private; ACS module 1 makes them public before patient-portal is deployed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: workshop-images
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  backoffLimit: 8
+  template:
+    spec:
+      serviceAccountName: workshop-images
+      restartPolicy: OnFailure
+      containers:
+        - name: build
+          image: {{ .Values.workshopImages.buildahImage }}
+          securityContext:
+            privileged: true
+          env:
+            - name: QUAY_NS
+              value: {{ .Release.Namespace }}
+            - name: QUAY_USER
+              valueFrom:
+                secretKeyRef:
+                  name: quay-admin-password
+                  key: username
+            - name: QUAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: quay-admin-password
+                  key: password
+            - name: BASE_IMAGE
+              value: {{ .Values.workshopImages.baseImage | quote }}
+            - name: DEMO_APPS_ARCHIVE
+              value: {{ .Values.workshopImages.demoAppsArchive | quote }}
+            - name: STORAGE_DRIVER
+              value: vfs
+            - name: BUILDAH_ISOLATION
+              value: chroot
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              PASS="${QUAY_PASSWORD}"
+              USER_NAME="${QUAY_USER}"
+              echo "Waiting for the Quay registry service..."
+              REGISTRY=""
+              for _ in $(seq 1 60); do
+                for candidate in \
+                  "registry-quay-app.${QUAY_NS}.svc:80" \
+                  "registry-quay.${QUAY_NS}.svc:8080" \
+                  "registry-quay.${QUAY_NS}.svc"; do
+                  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://${candidate}/v2/" || true)"
+                  if [[ "${code}" == "200" || "${code}" == "401" ]]; then
+                    REGISTRY="${candidate}"
+                    break 2
+                  fi
+                done
+                sleep 10
+              done
+              if [[ -z "${REGISTRY}" ]]; then
+                echo "Quay registry service did not answer /v2/" >&2
+                exit 1
+              fi
+              echo "Using registry ${REGISTRY}"
+              mkdir -p /etc/containers/registries.conf.d
+              printf '[[registry]]\nlocation = "%s"\ninsecure = true\n' "${REGISTRY}" \
+                > /etc/containers/registries.conf.d/workshop.conf
+              printf '%s' "${PASS}" | buildah login --tls-verify=false -u "${USER_NAME}" --password-stdin "${REGISTRY}"
+
+              have_tag() {
+                local repo="$1"
+                local code
+                code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+                  -u "${USER_NAME}:${PASS}" \
+                  "http://${REGISTRY}/v2/${repo}/manifests/0.1" || true)"
+                [[ "${code}" == "200" ]]
+              }
+
+              if have_tag "${USER_NAME}/python-alpine-golden"; then
+                echo "python-alpine-golden:0.1 already exists"
+              else
+                echo "Pushing python-alpine-golden:0.1"
+                ctr="$(buildah from --tls-verify=false "${BASE_IMAGE}")"
+                buildah commit "${ctr}" "python-alpine-golden:0.1"
+                buildah push --tls-verify=false python-alpine-golden:0.1 \
+                  "docker://${REGISTRY}/${USER_NAME}/python-alpine-golden:0.1"
+              fi
+
+              if have_tag "${USER_NAME}/frontend"; then
+                echo "frontend:0.1 already exists"
+              else
+                echo "Building frontend:0.1"
+                work="$(mktemp -d)"
+                curl -fsSL "${DEMO_APPS_ARCHIVE}" | tar -xz -C "${work}"
+                src="$(find "${work}" -type d -path '*/app-images/frontend' | head -1)"
+                if [[ -z "${src}" ]]; then
+                  echo "app-images/frontend not found in ${DEMO_APPS_ARCHIVE}" >&2
+                  exit 1
+                fi
+                sed -i -E \
+                  "s|^FROM python:3\\.12-alpine[^ ]*( AS .+)?|FROM ${REGISTRY}/${USER_NAME}/python-alpine-golden:0.1\\1|" \
+                  "${src}/Dockerfile"
+                buildah build --tls-verify=false -t frontend:0.1 -f "${src}/Dockerfile" "${src}"
+                buildah push --tls-verify=false frontend:0.1 \
+                  "docker://${REGISTRY}/${USER_NAME}/frontend:0.1"
+              fi
+              echo "Workshop images are in Quay and remain private"
+{{- end }}

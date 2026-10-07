@@ -1,5 +1,4 @@
-{{- if .Values.agentic.enabled }}
-{{- if .Values.llm.apiKey }}
+{{- if and .Values.agentic.enabled .Values.llm.apiUrl .Values.llm.model }}
 ---
 apiVersion: agentic.openshift.io/v1alpha1
 kind: LLMProvider
@@ -15,5 +14,4 @@ spec:
     url: {{ .Values.llm.apiUrl | quote }}
     credentialsSecret:
       name: llm-creds-openai
-{{- end }}
 {{- end }}

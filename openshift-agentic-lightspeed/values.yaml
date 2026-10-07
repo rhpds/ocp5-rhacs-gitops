@@ -5,6 +5,8 @@ llm:
   apiKey: ""
   provider: ""
   model: ""
+  azureDeploymentName: ""
+  azureApiVersion: ""
 
 featureGates:
   - MCPServer

@@ -19,6 +19,9 @@ llm:
   apiKey: ""
   provider: ""
   model: ""
+  # Required when provider is azure_openai. The API token is not stored here.
+  azureDeploymentName: ""
+  azureApiVersion: ""
 
 featureGates:
   - MCPServer

@@ -1,0 +1,210 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workshop-quay-integration
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: workshop-quay-integration
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+rules:
+  - apiGroups: ["platform.stackrox.io"]
+    resources: ["centrals"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: workshop-quay-integration
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: workshop-quay-integration
+subjects:
+  - kind: ServiceAccount
+    name: workshop-quay-integration
+    namespace: {{ .Release.Namespace }}
+---
+# Pods cannot open the apps load-balancer address. Map the Quay route hostname
+# at the in-cluster router, then register that registry with Central.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: workshop-quay-integration
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  backoffLimit: 12
+  template:
+    spec:
+      serviceAccountName: workshop-quay-integration
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: configure
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: ACS_NS
+              value: {{ .Release.Namespace }}
+            - name: QUAY_NS
+              value: quay
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "Waiting for the Quay route..."
+              QUAY_HOST=""
+              for _ in $(seq 1 60); do
+                for route in registry-quay quay-quay quay; do
+                  QUAY_HOST="$(oc -n "${QUAY_NS}" get route "${route}" -o jsonpath='{.spec.host}' 2>/dev/null || true)"
+                  if [[ -n "${QUAY_HOST}" ]]; then
+                    break 2
+                  fi
+                done
+                sleep 10
+              done
+              if [[ -z "${QUAY_HOST}" ]]; then
+                echo "Quay route not found in ${QUAY_NS}" >&2
+                exit 1
+              fi
+              ROUTER_IP="$(oc -n openshift-ingress get svc router-internal-default -o jsonpath='{.spec.clusterIP}')"
+              if [[ -z "${ROUTER_IP}" ]]; then
+                echo "router-internal-default has no cluster IP" >&2
+                exit 1
+              fi
+              CENTRAL_CR="$(oc -n "${ACS_NS}" get central -o jsonpath='{.items[0].metadata.name}')"
+              if [[ -z "${CENTRAL_CR}" ]]; then
+                echo "Central custom resource not found in ${ACS_NS}" >&2
+                exit 1
+              fi
+              export QUAY_HOST ROUTER_IP
+              if oc -n "${ACS_NS}" get central "${CENTRAL_CR}" -o json | python3 -c '
+              import json, os, sys
+              host = os.environ["QUAY_HOST"]
+              ip = os.environ["ROUTER_IP"]
+              spec = json.load(sys.stdin).get("spec") or {}
+              groups = [
+                  ((spec.get("central") or {}).get("hostAliases") or []),
+                  (((spec.get("scanner") or {}).get("analyzer") or {}).get("hostAliases") or []),
+                  (((spec.get("scannerV4") or {}).get("indexer") or {}).get("hostAliases") or []),
+              ]
+              def has_alias(aliases):
+                  return any(a.get("ip") == ip and host in (a.get("hostnames") or []) for a in aliases)
+              sys.exit(0 if all(has_alias(group) for group in groups) else 1)
+              '; then
+                echo "Quay route ${QUAY_HOST} already maps to router ${ROUTER_IP}"
+              else
+                PATCH="$(python3 -c '
+              import json, os
+              alias = {"ip": os.environ["ROUTER_IP"], "hostnames": [os.environ["QUAY_HOST"]]}
+              print(json.dumps({"spec": {
+                  "central": {"hostAliases": [alias]},
+                  "scanner": {"analyzer": {"hostAliases": [alias]}},
+                  "scannerV4": {"indexer": {"hostAliases": [alias]}},
+              }}))
+              ')"
+                echo "Mapping ${QUAY_HOST} to router ${ROUTER_IP}"
+                oc -n "${ACS_NS}" patch central "${CENTRAL_CR}" --type=merge -p "${PATCH}"
+                for deploy in central scanner scanner-v4-indexer; do
+                  if oc -n "${ACS_NS}" get "deploy/${deploy}" >/dev/null 2>&1; then
+                    oc -n "${ACS_NS}" rollout status "deploy/${deploy}" --timeout=300s
+                  fi
+                done
+              fi
+
+              QUAY_USER="$(oc -n "${QUAY_NS}" get secret quay-admin-password -o jsonpath='{.data.username}' | base64 -d)"
+              QUAY_PASSWORD="$(oc -n "${QUAY_NS}" get secret quay-admin-password -o jsonpath='{.data.password}' | base64 -d)"
+              if oc -n "${ACS_NS}" get secret central-admin-password >/dev/null 2>&1; then
+                ROX_PASSWORD="$(oc -n "${ACS_NS}" get secret central-admin-password -o jsonpath='{.data.password}' | base64 -d)"
+              else
+                ROX_PASSWORD="$(oc -n "${ACS_NS}" get secret central-htpasswd -o jsonpath='{.data.password}' | base64 -d)"
+              fi
+              echo "Waiting for Central..."
+              until curl -sk --max-time 5 "https://central.${ACS_NS}.svc:443/v1/ping"; do
+                sleep 10
+              done
+              TOKEN_JSON="$(curl -sk -u "admin:${ROX_PASSWORD}" \
+                -H "Content-Type: application/json" \
+                -d "{\"name\":\"workshop-quay-setup-$(date +%s)\",\"roles\":[\"Admin\"]}" \
+                "https://central.${ACS_NS}.svc:443/v1/apitokens/generate")"
+              TOKEN="$(printf '%s' "${TOKEN_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))')"
+              if [[ -z "${TOKEN}" ]]; then
+                echo "Could not generate a Central API token" >&2
+                exit 1
+              fi
+              export QUAY_HOST QUAY_USER QUAY_PASSWORD TOKEN
+              python3 - <<'PY'
+              import json, os, urllib.request
+              host = os.environ["QUAY_HOST"]
+              token = os.environ["TOKEN"]
+              base = "https://central." + os.environ["ACS_NS"] + ".svc:443/v1/imageintegrations"
+              ctx = __import__("ssl")._create_unverified_context()
+              req = urllib.request.Request(base, headers={"Authorization": f"Bearer {token}"})
+              with urllib.request.urlopen(req, context=ctx) as resp:
+                  data = json.load(resp)
+              existing = next((i for i in data.get("integrations", []) if i.get("name") == "workshop-quay"), None)
+              body = {
+                  "name": "workshop-quay",
+                  "type": "quay",
+                  "categories": ["REGISTRY"],
+                  "quay": {
+                      "endpoint": host,
+                      "insecure": True,
+                      "registryRobotCredentials": {
+                          "username": os.environ["QUAY_USER"],
+                          "password": os.environ["QUAY_PASSWORD"],
+                      },
+                  },
+                  "skipTestIntegration": True,
+              }
+              if existing and (existing.get("quay") or {}).get("endpoint") == host:
+                  print("workshop-quay integration already points at " + host)
+                  raise SystemExit(0)
+              payload = json.dumps(body).encode()
+              if existing:
+                  url = base + "/" + existing["id"]
+                  method = "PUT"
+                  body["id"] = existing["id"]
+                  payload = json.dumps(body).encode()
+              else:
+                  url = base
+                  method = "POST"
+              call = urllib.request.Request(url, data=payload, method=method, headers={
+                  "Authorization": f"Bearer {token}",
+                  "Content-Type": "application/json",
+              })
+              with urllib.request.urlopen(call, context=ctx) as resp:
+                  created = json.load(resp)
+              print("workshop-quay integration " + method + " id=" + created.get("id", ""))
+              PY

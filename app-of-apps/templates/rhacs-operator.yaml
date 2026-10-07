@@ -24,5 +24,13 @@ spec:
           routeHost: {{ .Values.acs.routeHost | default "central-reencrypt-stackrox" }}
           collector:
             nonAggregatedNetworks: "172.231.0.0/16"
+  ignoreDifferences:
+    - group: platform.stackrox.io
+      kind: Central
+      name: stackrox-central-services
+      jsonPointers:
+        - /spec/central/hostAliases
+        - /spec/scanner/analyzer/hostAliases
+        - /spec/scannerV4/indexer/hostAliases
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

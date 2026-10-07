@@ -1,4 +1,4 @@
-{{- if .Values.llm.apiKey }}
+{{- if and .Values.llm.provider .Values.llm.model .Values.llm.apiUrl }}
 ---
 apiVersion: ols.openshift.io/v1alpha1
 kind: OLSConfig
@@ -22,6 +22,10 @@ spec:
         name: {{ .Values.llm.provider }}
         type: {{ .Values.llm.provider }}
         url: {{ .Values.llm.apiUrl | quote }}
+{{- if eq .Values.llm.provider "azure_openai" }}
+        deploymentName: {{ required "llm.azureDeploymentName is required for azure_openai" .Values.llm.azureDeploymentName | quote }}
+        apiVersion: {{ required "llm.azureApiVersion is required for azure_openai" .Values.llm.azureApiVersion | quote }}
+{{- end }}
   mcpServers:
 {{- range .Values.mcpServers }}
     - name: {{ .name }}

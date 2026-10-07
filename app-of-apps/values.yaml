@@ -125,7 +125,11 @@ openshiftAgenticLightspeed:
   name: openshift-agentic-lightspeed
   namespace: openshift-lightspeed
   llm:
+    # Provider, model, and URL are instructor settings. Attendees paste the
+    # shared token into the bastion init script, which writes the secrets.
     apiUrl: ""
     apiKey: ""
     provider: ""
     model: ""
+    azureDeploymentName: ""
+    azureApiVersion: ""

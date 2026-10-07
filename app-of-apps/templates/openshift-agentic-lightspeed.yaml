@@ -14,10 +14,12 @@ spec:
     helm:
       valuesObject:
         llm:
-          apiUrl: {{ .Values.openshiftAgenticLightspeed.llm.apiUrl }}
-          apiKey: {{ .Values.openshiftAgenticLightspeed.llm.apiKey }}
-          provider: {{ .Values.openshiftAgenticLightspeed.llm.provider }}
-          model: {{ .Values.openshiftAgenticLightspeed.llm.model }}
+          apiUrl: {{ .Values.openshiftAgenticLightspeed.llm.apiUrl | quote }}
+          apiKey: {{ .Values.openshiftAgenticLightspeed.llm.apiKey | quote }}
+          provider: {{ .Values.openshiftAgenticLightspeed.llm.provider | quote }}
+          model: {{ .Values.openshiftAgenticLightspeed.llm.model | quote }}
+          azureDeploymentName: {{ .Values.openshiftAgenticLightspeed.llm.azureDeploymentName | quote }}
+          azureApiVersion: {{ .Values.openshiftAgenticLightspeed.llm.azureApiVersion | quote }}
   ignoreDifferences:
     - group: rbac.authorization.k8s.io
       kind: ClusterRoleBinding
