@@ -34,8 +34,9 @@ acsVirt:
   name: rhacs-virt
   namespace: rhacs-virt
 
+# Google Online Boutique. ACS labs scan roadshow-demo-apps, not this namespace.
 acsMicroservicesDemo:
-  enabled: true
+  enabled: false
   name: rhacs-microservices-demo
   namespace: rhacs-microservices-demo
 
@@ -49,8 +50,9 @@ clusterUpdate:
   name: cluster-update
   namespace: openshift-cluster-version
 
+# Kuadrant MCP gateway. Lightspeed uses openshift-mcp; the ACS lab uses rhacs-mcp.
 mcpGateway:
-  enabled: true
+  enabled: false
   name: mcp-gateway
   namespace: mcp-gateway
 
@@ -76,13 +78,15 @@ quay:
   adminUsername: admin
   # Operator-managed host prefix: registry-quay-quay.<cluster subdomain>
 
+# Mock inventory/payments/accounts servers for the MCP gateway.
 mockMcpServers:
-  enabled: true
+  enabled: false
   name: mock-mcp-servers
   namespace: mock-mcp-servers
 
+# Istio, Kiali, Tempo, and Bookinfo. Istio CNI is a daemonset and fills control-plane imagefs.
 kialiOssm:
-  enabled: true
+  enabled: false
   name: kiali-ossm
   namespace: istio-system
 
