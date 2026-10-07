@@ -19,6 +19,7 @@ istio:
   revision: default
 
 minio:
+  image: quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z
   accessKeyId: minio
   accessKeySecret: minio123
   endpoint: "http://minio:9000"

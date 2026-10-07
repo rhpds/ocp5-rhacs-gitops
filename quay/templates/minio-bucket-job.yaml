@@ -12,18 +12,16 @@ metadata:
 spec:
   backoffLimit: 20
   template:
-    metadata:
-      annotations:
-        openshift.io/required-scc: anyuid
     spec:
       restartPolicy: OnFailure
       serviceAccountName: minio
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-        - name: mc
-          image: {{ .Values.minio.mcImage }}
+        - name: bucket
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -33,18 +31,64 @@ spec:
             - secretRef:
                 name: minio
           env:
-            - name: HOME
-              value: /tmp
-            - name: MC_CONFIG_DIR
-              value: /tmp/.mc
+            - name: MINIO_ENDPOINT
+              value: http://minio:9000
+            - name: BUCKET
+              value: {{ .Values.minio.bucket | quote }}
           command:
-            - /bin/sh
+            - /bin/bash
             - -c
             - |
               set -euo pipefail
-              echo "Waiting for MinIO..."
-              until mc alias set local http://minio:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"; do
-                sleep 5
-              done
-              mc mb --ignore-existing "local/{{ .Values.minio.bucket }}"
-              echo "Bucket {{ .Values.minio.bucket }} ready"
+              echo "Waiting for MinIO and creating bucket ${BUCKET}..."
+              python3 - <<'PY'
+              import datetime, hashlib, hmac, os, urllib.error, urllib.request
+              endpoint = os.environ["MINIO_ENDPOINT"].rstrip("/")
+              access = os.environ["MINIO_ROOT_USER"]
+              secret = os.environ["MINIO_ROOT_PASSWORD"]
+              bucket = os.environ["BUCKET"]
+              region = "us-east-1"
+              service = "s3"
+
+              def sign(key, msg):
+                  return hmac.new(key, msg.encode(), hashlib.sha256).digest()
+
+              def signing_key(key, date):
+                  k_date = sign(("AWS4" + key).encode(), date)
+                  k_region = sign(k_date, region)
+                  k_service = sign(k_region, service)
+                  return sign(k_service, "aws4_request")
+
+              host = endpoint.split("://", 1)[1]
+              now = datetime.datetime.utcnow()
+              amzdate = now.strftime("%Y%m%dT%H%M%SZ")
+              datestamp = now.strftime("%Y%m%d")
+              payload_hash = hashlib.sha256(b"").hexdigest()
+              canonical_uri = "/" + bucket
+              canonical_headers = f"host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amzdate}\n"
+              signed_headers = "host;x-amz-content-sha256;x-amz-date"
+              canonical_request = "\n".join(["PUT", canonical_uri, "", canonical_headers, signed_headers, payload_hash])
+              scope = f"{datestamp}/{region}/{service}/aws4_request"
+              string_to_sign = "\n".join(["AWS4-HMAC-SHA256", amzdate, scope, hashlib.sha256(canonical_request.encode()).hexdigest()])
+              signature = hmac.new(signing_key(secret, datestamp), string_to_sign.encode(), hashlib.sha256).hexdigest()
+              authorization = f"AWS4-HMAC-SHA256 Credential={access}/{scope}, SignedHeaders={signed_headers}, Signature={signature}"
+              request = urllib.request.Request(
+                  endpoint + canonical_uri,
+                  method="PUT",
+                  headers={
+                      "Host": host,
+                      "x-amz-date": amzdate,
+                      "x-amz-content-sha256": payload_hash,
+                      "Authorization": authorization,
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request) as response:
+                      print(f"Created bucket {bucket} ({response.status})")
+              except urllib.error.HTTPError as exc:
+                  body = exc.read().decode(errors="replace")
+                  if exc.code == 409 or "BucketAlready" in body:
+                      print(f"Bucket {bucket} already exists")
+                  else:
+                      raise SystemExit(f"Create bucket failed: HTTP {exc.code} {body}")
+              PY
