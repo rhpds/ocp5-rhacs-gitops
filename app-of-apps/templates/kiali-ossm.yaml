@@ -25,5 +25,20 @@ spec:
     namespace: bookinfo
     jsonPointers:
     - /spec/http/0/route
+  # OpenShift rewrites namespace PSA labels and SCC annotations.
+  - group: ""
+    kind: Namespace
+    jqPathExpressions:
+      - .metadata.labels["kubernetes.io/metadata.name"]
+      - .metadata.labels["pod-security.kubernetes.io/enforce"]
+      - .metadata.labels["pod-security.kubernetes.io/enforce-version"]
+      - .metadata.labels["pod-security.kubernetes.io/audit"]
+      - .metadata.labels["pod-security.kubernetes.io/audit-version"]
+      - .metadata.labels["pod-security.kubernetes.io/warn"]
+      - .metadata.labels["pod-security.kubernetes.io/warn-version"]
+      - .metadata.labels["security.openshift.io/scc.podSecurityLabelSync"]
+      - .metadata.annotations["openshift.io/sa.scc.mcs"]
+      - .metadata.annotations["openshift.io/sa.scc.supplemental-groups"]
+      - .metadata.annotations["openshift.io/sa.scc.uid-range"]
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

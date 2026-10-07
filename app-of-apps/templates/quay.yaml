@@ -3,6 +3,12 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 {{ include "app-of-apps.metadata" (dict "name" .Values.quay.name "namespace" .Values.argocd.namespace "syncWave" "0") }}
 spec:
+  # Quay operator fills component defaults that are not in the chart.
+  ignoreDifferences:
+    - group: quay.redhat.com
+      kind: QuayRegistry
+      jqPathExpressions:
+        - .spec.components[]?.overrides
   destination:
     namespace: {{ .Values.quay.namespace }}
     server: https://kubernetes.default.svc

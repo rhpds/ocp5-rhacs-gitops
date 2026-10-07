@@ -29,5 +29,17 @@ spec:
         - .metadata.labels["pod-security.kubernetes.io/warn"]
         - .metadata.labels["pod-security.kubernetes.io/warn-version"]
         - .metadata.labels["security.openshift.io/scc.podSecurityLabelSync"]
+        - .metadata.annotations["openshift.io/sa.scc.mcs"]
+        - .metadata.annotations["openshift.io/sa.scc.supplemental-groups"]
+        - .metadata.annotations["openshift.io/sa.scc.uid-range"]
+    - group: ""
+      kind: Service
+      jqPathExpressions:
+        - .spec.clusterIP
+        - .spec.clusterIPs
+        - .spec.ipFamilies
+        - .spec.ipFamilyPolicy
+        - .spec.internalTrafficPolicy
+        - .spec.sessionAffinity
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

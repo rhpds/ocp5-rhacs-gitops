@@ -31,6 +31,8 @@ spec:
       jsonPointers:
         - /spec/central/hostAliases
         - /spec/scanner/analyzer/hostAliases
-        - /spec/scannerV4/indexer/hostAliases
+        # The workshop job adds indexer hostAliases. The ACS operator then
+        # fills the rest of scannerV4, which is not declared in git.
+        - /spec/scannerV4
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

@@ -62,15 +62,14 @@ spec:
           args:
             - |
               set -euo pipefail
-              oc patch kubeapiserver cluster --type merge -p '{
-                "spec": {
-                  "unsupportedConfigOverrides": {
-                    "apiServerArguments": {
-                      "audit-log-maxsize": ["{{ .Values.auditLog.maxSize }}"],
-                      "audit-log-maxbackup": ["{{ .Values.auditLog.maxBackup }}"]
-                    }
-                  }
-                }
-              }'
-              echo "KubeAPIServer audit retention patched"
+              # Insights flags unsupportedConfigOverrides and it can block upgrades.
+              # OpenShift already rotates audit logs. The compliance lab must not set this.
+              current=$(oc get kubeapiserver cluster -o jsonpath='{.spec.unsupportedConfigOverrides}' 2>/dev/null || true)
+              if [[ -n "${current}" && "${current}" != "<no value>" ]]; then
+                oc patch kubeapiserver cluster --type json \
+                  -p '[{"op":"remove","path":"/spec/unsupportedConfigOverrides"}]'
+                echo "Removed KubeAPIServer unsupportedConfigOverrides"
+              else
+                echo "KubeAPIServer has no unsupportedConfigOverrides"
+              fi
 {{- end }}

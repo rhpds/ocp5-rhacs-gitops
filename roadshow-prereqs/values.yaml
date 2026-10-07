@@ -20,10 +20,11 @@ compliance:
   source: redhat-operators
   sourceNamespace: openshift-marketplace
 
+# The audit job removes kube-apiserver unsupportedConfigOverrides.
+# Insights treats that section as unsupported, and the compliance lab
+# expects the platform audit rotation defaults.
 auditLog:
   enabled: true
-  maxSize: "2048"
-  maxBackup: "3"
 
 collector:
   externalIps: true

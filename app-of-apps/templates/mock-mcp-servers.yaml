@@ -8,6 +8,10 @@ spec:
       kind: Deployment
       jsonPointers:
         - /spec/replicas
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      jqPathExpressions:
+        - .spec.rules[].backendRefs[].weight
     - group: kuadrant.io
       kind: RateLimitPolicy
       name: mcp-gateway-ratelimit

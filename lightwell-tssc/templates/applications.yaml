@@ -267,6 +267,20 @@ spec:
       jsonPointers:
         - /data
         - /stringData
+    - group: ""
+      kind: Namespace
+      jqPathExpressions:
+        - .metadata.labels["kubernetes.io/metadata.name"]
+        - .metadata.labels["pod-security.kubernetes.io/enforce"]
+        - .metadata.labels["pod-security.kubernetes.io/enforce-version"]
+        - .metadata.labels["pod-security.kubernetes.io/audit"]
+        - .metadata.labels["pod-security.kubernetes.io/audit-version"]
+        - .metadata.labels["pod-security.kubernetes.io/warn"]
+        - .metadata.labels["pod-security.kubernetes.io/warn-version"]
+        - .metadata.labels["security.openshift.io/scc.podSecurityLabelSync"]
+        - .metadata.annotations["openshift.io/sa.scc.mcs"]
+        - .metadata.annotations["openshift.io/sa.scc.supplemental-groups"]
+        - .metadata.annotations["openshift.io/sa.scc.uid-range"]
   syncPolicy:
     automated:
       prune: true
@@ -366,12 +380,27 @@ spec:
     server: https://kubernetes.default.svc
     namespace: {{ .Values.components.networkPolicy.namespace }}
   # Learner tightens build-egress in 4.3. Do not let Helm restore allow-all egress.
+  # OpenShift rewrites namespace PSA labels and SCC annotations.
   ignoreDifferences:
     - group: networking.k8s.io
       kind: NetworkPolicy
       name: build-egress
       jsonPointers:
         - /spec
+    - group: ""
+      kind: Namespace
+      jqPathExpressions:
+        - .metadata.labels["kubernetes.io/metadata.name"]
+        - .metadata.labels["pod-security.kubernetes.io/enforce"]
+        - .metadata.labels["pod-security.kubernetes.io/enforce-version"]
+        - .metadata.labels["pod-security.kubernetes.io/audit"]
+        - .metadata.labels["pod-security.kubernetes.io/audit-version"]
+        - .metadata.labels["pod-security.kubernetes.io/warn"]
+        - .metadata.labels["pod-security.kubernetes.io/warn-version"]
+        - .metadata.labels["security.openshift.io/scc.podSecurityLabelSync"]
+        - .metadata.annotations["openshift.io/sa.scc.mcs"]
+        - .metadata.annotations["openshift.io/sa.scc.supplemental-groups"]
+        - .metadata.annotations["openshift.io/sa.scc.uid-range"]
   syncPolicy:
     automated:
       prune: true

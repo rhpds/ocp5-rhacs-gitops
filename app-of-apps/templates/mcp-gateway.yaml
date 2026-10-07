@@ -3,6 +3,17 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 {{ include "app-of-apps.metadata" (dict "name" .Values.mcpGateway.name "namespace" .Values.argocd.namespace "syncWave" "0") }}
 spec:
+  ignoreDifferences:
+    - group: cert-manager.io
+      kind: Certificate
+      jsonPointers:
+        - /spec/revisionHistoryLimit
+        - /spec/privateKey
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      jsonPointers:
+        - /spec/addresses
+        - /spec/infrastructure
   destination:
     namespace: {{ .Values.mcpGateway.namespace }}
     server: https://kubernetes.default.svc

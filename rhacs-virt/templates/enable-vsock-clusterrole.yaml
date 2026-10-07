@@ -12,3 +12,6 @@ rules:
   - apiGroups: ["kubevirt.io"]
     resources: ["kubevirts"]
     verbs: ["get", "list"]
+  - apiGroups: ["cdi.kubevirt.io"]
+    resources: ["dataimportcrons"]
+    verbs: ["get", "list", "delete", "deletecollection"]
