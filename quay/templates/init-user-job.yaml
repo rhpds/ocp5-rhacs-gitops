@@ -37,7 +37,7 @@ spec:
                 - ALL
           env:
             - name: QUAY_SVC
-              value: {{ .Values.registry.name }}-quay.{{ .Release.Namespace }}.svc
+              value: {{ .Values.registry.name }}-quay-app.{{ .Release.Namespace }}.svc
             - name: QUAY_USERNAME
               valueFrom:
                 secretKeyRef:
