@@ -15,6 +15,11 @@ stringData:
       - {{ .Values.adminUsername }}
     FEATURE_USER_CREATION: false
     FEATURE_ANONYMOUS_ACCESS: false
+    # Serve blobs from Quay. Without this, clients follow a presigned URL to
+    # the MinIO hostname. minio.<namespace>.svc is not a CoreDNS record
+    # (the record is minio.<namespace>.svc.cluster.local), so kubelet and
+    # buildah fail with "lookup minio.quay.svc: no such host".
+    FEATURE_PROXY_STORAGE: true
     DISTRIBUTED_STORAGE_DEFAULT_LOCATIONS: []
     DISTRIBUTED_STORAGE_PREFERENCE:
       - default
