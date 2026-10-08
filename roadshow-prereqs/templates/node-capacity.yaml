@@ -1,0 +1,59 @@
+{{- if .Values.nodeCapacity.enabled }}
+# Masters ship with NODE_SIZING_ENABLED=false and a fixed 1Gi systemReserved.
+# This control plane is schedulable and runs the platform plus lab workloads, so
+# host processes exceed that 1Gi and SystemMemoryExceedsReservation fires.
+# Workers already calculate the reservation from node size. Use the same
+# calculation on masters. The script rewrites the kubelet drop-in at boot:
+# 1Gi plus 6% of memory between 8Gi and 128Gi, then 2% above that.
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-master-node-sizing
+  labels:
+    machineconfiguration.openshift.io/role: master
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  config:
+    ignition:
+      version: 3.5.0
+    storage:
+      files:
+        - path: /etc/node-sizing-enabled.env
+          mode: 0644
+          overwrite: true
+          contents:
+            source: data:text/plain;charset=utf-8;base64,{{ printf "NODE_SIZING_ENABLED=true\nSYSTEM_RESERVED_MEMORY=1Gi\nSYSTEM_RESERVED_CPU=500m\nSYSTEM_RESERVED_ES=1Gi\n" | b64enc }}
+---
+# Image GC must start before kubelet eviction. Eviction fires at 15% imagefs
+# free (85% used). The default GC watermarks are 85/80, so eviction and GC
+# race and DiskPressure deletes pods. Collect unused images at 70% used and
+# stop at 60%, leaving headroom on the 100Gi root disk.
+apiVersion: machineconfiguration.openshift.io/v1
+kind: KubeletConfig
+metadata:
+  name: master-image-gc
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  machineConfigPoolSelector:
+    matchLabels:
+      pools.operator.machineconfiguration.openshift.io/master: ""
+  kubeletConfig:
+    imageGCHighThresholdPercent: {{ .Values.nodeCapacity.imageGCHighThresholdPercent }}
+    imageGCLowThresholdPercent: {{ .Values.nodeCapacity.imageGCLowThresholdPercent }}
+---
+apiVersion: machineconfiguration.openshift.io/v1
+kind: KubeletConfig
+metadata:
+  name: worker-image-gc
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  machineConfigPoolSelector:
+    matchLabels:
+      pools.operator.machineconfiguration.openshift.io/worker: ""
+  kubeletConfig:
+    imageGCHighThresholdPercent: {{ .Values.nodeCapacity.imageGCHighThresholdPercent }}
+    imageGCLowThresholdPercent: {{ .Values.nodeCapacity.imageGCLowThresholdPercent }}
+{{- end }}

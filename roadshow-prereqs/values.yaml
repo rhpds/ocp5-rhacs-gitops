@@ -29,3 +29,10 @@ auditLog:
 collector:
   externalIps: true
   nonAggregatedNetworks: "172.231.0.0/16"
+
+# Master systemReserved and kubelet image GC. Applying this rolls the master
+# pool once (and the worker pool once, for image GC only).
+nodeCapacity:
+  enabled: true
+  imageGCHighThresholdPercent: 70
+  imageGCLowThresholdPercent: 60
