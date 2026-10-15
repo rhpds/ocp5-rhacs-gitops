@@ -1,5 +1,5 @@
 apiVersion: v2
 name: rhacs-virt
-description: RHEL 9 VirtualMachine for ACS scanning demos
+description: VSOCK feature gate and roxagent binary Service for the ACS virtual machine lab
 type: application
 version: 0.1.0

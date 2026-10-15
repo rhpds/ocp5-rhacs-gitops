@@ -1,9 +1,3 @@
-vm:
-  name: rhel9-vm
-  image: quay.io/rhpds/ocp5-vm-primed:rhel9
-  user: cloud-user
-  password: "roadshow"
-
 # Sensor lives here; roxagent-bin copies the matching binary from that Deployment.
 acs:
   namespace: rhacs-operator

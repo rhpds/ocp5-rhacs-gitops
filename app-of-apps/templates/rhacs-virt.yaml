@@ -11,9 +11,5 @@ spec:
     path: rhacs-virt
     repoURL: {{ .Values.gitops.repoURL }}
     targetRevision: {{ .Values.gitops.targetRevision }}
-    helm:
-      valuesObject:
-        vm:
-          password: {{ .Values.acsVirt.password | quote }}
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}
