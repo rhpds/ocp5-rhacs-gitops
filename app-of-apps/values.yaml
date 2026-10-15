@@ -33,6 +33,7 @@ acsVirt:
   enabled: true
   name: rhacs-virt
   namespace: rhacs-virt
+  password: "roadshow"
 
 # Google Online Boutique. ACS labs scan roadshow-demo-apps, not this namespace.
 acsMicroservicesDemo:

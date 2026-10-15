@@ -14,6 +14,6 @@ spec:
     helm:
       valuesObject:
         vm:
-          password: {{ .Values.common.password }}
+          password: {{ .Values.acsVirt.password | quote }}
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}
