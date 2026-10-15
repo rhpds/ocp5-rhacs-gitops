@@ -3,4 +3,3 @@ vm:
   image: quay.io/rhpds/ocp5-vm-primed:rhel9
   user: cloud-user
   password: "roadshow"
-  roxagentVersion: "4.11.1"

@@ -3,6 +3,8 @@ apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: {{ .Values.vm.name }}
+  labels:
+    app: {{ .Values.vm.name }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
@@ -12,37 +14,47 @@ spec:
     metadata:
       labels:
         kubevirt.io/domain: {{ .Values.vm.name }}
+        kubevirt.io/size: small
     spec:
       domain:
         cpu:
-          cores: 2
+          cores: 1
           sockets: 1
           threads: 1
         devices:
           autoattachVSOCK: true
           disks:
-            - name: containerdisk
-              bootOrder: 1
+            - bootOrder: 1
               disk:
                 bus: virtio
-            - name: cloudinitdisk
-              bootOrder: 2
-              disk:
+              name: rootdisk
+            - disk:
                 bus: virtio
+              name: cloudinitdisk
           interfaces:
-            - name: default
-              masquerade: {}
+            - masquerade: {}
+              model: virtio
+              name: default
+          rng: {}
+        features:
+          acpi: {}
+          smm:
+            enabled: true
+        firmware:
+          bootloader:
+            efi: {}
+        machine:
+          type: pc-q35-rhel9.6.0
         memory:
-          guest: 4Gi
-        resources:
-          requests:
-            memory: 4Gi
-            cpu: "2"
+          guest: 2Gi
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
       networks:
         - name: default
           pod: {}
+      terminationGracePeriodSeconds: 180
       volumes:
-        - name: containerdisk
+        - name: rootdisk
           containerDisk:
             image: {{ .Values.vm.image }}
         - name: cloudinitdisk
