@@ -16,8 +16,8 @@ spec:
         kubevirt.io/domain: {{ .Values.vm.name }}
         kubevirt.io/size: small
       annotations:
-        # Bump to recreate the VMI so cloud-init re-runs with the lab spec.
-        rhacs.demo/agent: lab-rhel-webserver-spec
+        # Bump to recreate the VMI so the firmware change is applied.
+        rhacs.demo/agent: efi-secureboot-off
     spec:
       domain:
         cpu:
@@ -45,7 +45,10 @@ spec:
             enabled: true
         firmware:
           bootloader:
-            efi: {}
+            # Default EFI turns Secure Boot on. That puts the guest kernel in
+            # lockdown, and roxagent then fails with "debugfs access is restricted".
+            efi:
+              secureBoot: false
         machine:
           type: pc-q35-rhel9.6.0
         memory:
