@@ -3,6 +3,8 @@ apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: {{ .Values.vm.name }}
+  labels:
+    app: {{ .Values.vm.name }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
@@ -12,44 +14,30 @@ spec:
     metadata:
       labels:
         kubevirt.io/domain: {{ .Values.vm.name }}
+        kubevirt.io/size: small
       annotations:
-        # Bump to recreate the VMI so cloud-init re-runs (RPM copy on /var/lib).
-        rhacs.demo/agent: pull-serve-v3-rpmdb-varlib
+        # Bump to recreate the VMI so cloud-init re-runs with the lab spec.
+        rhacs.demo/agent: lab-rhel-webserver-spec
     spec:
-      # Control-plane nodes on this cluster also carry the worker label, so a
-      # worker nodeSelector still admits them. Require worker and reject
-      # master and control-plane.
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: node-role.kubernetes.io/worker
-                    operator: Exists
-                  - key: node-role.kubernetes.io/master
-                    operator: DoesNotExist
-                  - key: node-role.kubernetes.io/control-plane
-                    operator: DoesNotExist
       domain:
         cpu:
-          cores: 2
+          cores: 1
           sockets: 1
           threads: 1
         devices:
           autoattachVSOCK: true
           disks:
-            - name: containerdisk
-              bootOrder: 1
+            - bootOrder: 1
               disk:
                 bus: virtio
-            - name: cloudinitdisk
-              bootOrder: 2
-              disk:
+              name: rootdisk
+            - disk:
                 bus: virtio
+              name: cloudinitdisk
           interfaces:
-            - name: default
-              masquerade: {}
+            - masquerade: {}
               model: virtio
+              name: default
           rng: {}
         features:
           acpi: {}
@@ -61,17 +49,15 @@ spec:
         machine:
           type: pc-q35-rhel9.6.0
         memory:
-          guest: 4Gi
-        resources:
-          requests:
-            memory: 4Gi
-            cpu: "2"
+          guest: 2Gi
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
       networks:
         - name: default
           pod: {}
       terminationGracePeriodSeconds: 180
       volumes:
-        - name: containerdisk
+        - name: rootdisk
           containerDisk:
             image: {{ .Values.vm.image }}
         - name: cloudinitdisk
