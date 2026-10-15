@@ -13,8 +13,8 @@ spec:
       labels:
         kubevirt.io/domain: {{ .Values.vm.name }}
       annotations:
-        # Bump to recreate the VMI so cloud-init re-runs (host-path / + Satellite).
-        rhacs.demo/agent: pull-serve-v2-hostpath-root
+        # Bump to recreate the VMI so cloud-init re-runs (RPM copy on /var/lib).
+        rhacs.demo/agent: pull-serve-v3-rpmdb-varlib
     spec:
       # Control-plane nodes on this cluster also carry the worker label, so a
       # worker nodeSelector still admits them. Require worker and reject
@@ -49,6 +49,17 @@ spec:
           interfaces:
             - name: default
               masquerade: {}
+              model: virtio
+          rng: {}
+        features:
+          acpi: {}
+          smm:
+            enabled: true
+        firmware:
+          bootloader:
+            efi: {}
+        machine:
+          type: pc-q35-rhel9.6.0
         memory:
           guest: 4Gi
         resources:
@@ -58,6 +69,7 @@ spec:
       networks:
         - name: default
           pod: {}
+      terminationGracePeriodSeconds: 180
       volumes:
         - name: containerdisk
           containerDisk:
