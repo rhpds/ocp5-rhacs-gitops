@@ -1,4 +1,4 @@
-{{- if and .Values.llm.provider .Values.llm.model .Values.llm.apiUrl }}
+{{- if and .Values.llm.provider .Values.llm.model .Values.llm.apiUrl .Values.llm.apiKey }}
 ---
 apiVersion: ols.openshift.io/v1alpha1
 kind: OLSConfig

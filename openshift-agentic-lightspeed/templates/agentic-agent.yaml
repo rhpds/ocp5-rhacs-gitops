@@ -1,4 +1,4 @@
-{{- if and .Values.agentic.enabled .Values.llm.apiUrl .Values.llm.model }}
+{{- if and .Values.agentic.enabled .Values.llm.apiUrl .Values.llm.model .Values.llm.apiKey }}
 ---
 apiVersion: agentic.openshift.io/v1alpha1
 kind: Agent
