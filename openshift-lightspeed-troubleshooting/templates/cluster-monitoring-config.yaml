@@ -10,4 +10,6 @@ data:
   config.yaml: |
     enableUserWorkload: true
     alertmanagerMain:
-      enableAlertmanagerConfig: true
+      # Platform Alertmanager key. enableAlertmanagerConfig is only valid on
+      # user-workload-monitoring-config and the admission webhook rejects it here.
+      enableUserAlertmanagerConfig: true

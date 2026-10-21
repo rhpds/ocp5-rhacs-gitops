@@ -103,12 +103,12 @@ demoApps:
   path: kubernetes-manifests
 
 # Lightwell TSSC workshop stack (Nexus, Gitea, RHTAS, RHTPA, Pipelines, RHDH).
-# Child charts stay in rhpds/lightwell-tssc-workshop. RHACS Central and Showroom
+# Child charts stay in mfosterrox/lightwell-tssc-workshop. RHACS Central and Showroom
 # stay with this repo — Lightwell only adds pipeline hooks against existing Central.
 lightwellTssc:
   enabled: true
   name: lightwell-tssc
-  repoURL: https://github.com/rhpds/lightwell-tssc-workshop.git
+  repoURL: https://github.com/mfosterrox/lightwell-tssc-workshop.git
   targetRevision: main
   basePath: automation/gitops
 

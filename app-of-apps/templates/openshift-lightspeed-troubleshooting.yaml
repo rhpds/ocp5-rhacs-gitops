@@ -16,8 +16,9 @@ spec:
       namespace: inventory
       jsonPointers:
         - /spec/template/spec/containers/0/image
-    # payments is shared with demo-apps (visa-processor). Privileged SCC grant
-    # syncs PSA labels; do not let this Application revert them.
+    # roadshow-demo-apps owns Namespace/payments (visa-processor). This
+    # Application only adds workloads in that namespace. Privileged SCC grant
+    # syncs PSA labels on namespaces this chart does create; do not revert them.
     - group: ""
       kind: Namespace
       jqPathExpressions:

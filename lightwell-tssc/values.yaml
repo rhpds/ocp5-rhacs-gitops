@@ -1,11 +1,11 @@
-# Child charts stay in https://github.com/rhpds/lightwell-tssc-workshop
+# Child charts stay in https://github.com/mfosterrox/lightwell-tssc-workshop
 # (automation/gitops/components/*). This chart only creates Argo Applications.
 #
 # RHACS Central/operator and Showroom are owned by the roadshow app-of-apps.
 # The Lightwell RHACS Application is hooks-only (Tekton tasks + CI token).
 
 gitops:
-  repoUrl: https://github.com/rhpds/lightwell-tssc-workshop.git
+  repoUrl: https://github.com/mfosterrox/lightwell-tssc-workshop.git
   revision: main
   basePath: automation/gitops
 
