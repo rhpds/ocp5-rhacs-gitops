@@ -13,7 +13,8 @@ subscription:
 catalogSource:
   enabled: true
   name: acs-nightly-catalog
-  image: quay.io/rhacs-eng/stackrox-operator-index:v4.12.0-nightly-20260729-fast
+  # Newest multi-arch 5.0 nightly. The 5.0 line stops at 2026-09-21; later nightlies are 5.1.
+  image: quay.io/rhacs-eng/stackrox-operator-index:v5.0.0-nightly-20260921-fast
   displayName: ACS Nightly Catalog
 
 imageDigestMirrorSet:
