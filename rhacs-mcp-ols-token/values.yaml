@@ -1,4 +1,6 @@
 acsNamespace: rhacs-operator
 olsNamespace: openshift-lightspeed
 mcpNamespace: rhacs-mcp
+# Argo CD release name plus the chart's service suffix.
+mcpServiceName: rhacs-mcp-server-stackrox-mcp
 adminPassword: ""

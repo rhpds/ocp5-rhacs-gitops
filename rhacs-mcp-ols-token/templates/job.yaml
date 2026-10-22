@@ -84,41 +84,43 @@ spec:
                 --dry-run=client -o yaml | oc apply -f -
               echo "Secret created"
 
-              # Patch OLSConfig to add acs-mcp server with secret-based auth
+              # OLSConfig is created when the lab script stores the provider. Wait
+              # briefly, then add acs-mcp without replacing other MCP servers.
+              MCP_URL="https://{{ .Values.mcpServiceName }}.{{ .Values.mcpNamespace }}.svc:443/mcp"
+              echo "Waiting for OLSConfig before registering ${MCP_URL}..."
+              found=false
+              for _ in $(seq 1 30); do
+                if oc -n "${OLS_NS}" get olsconfig cluster >/dev/null 2>&1; then
+                  found=true
+                  break
+                fi
+                sleep 10
+              done
+              if [[ "${found}" != true ]]; then
+                echo "OLSConfig/cluster is not present yet. Lab setup registers acs-mcp after it creates OLSConfig."
+                exit 0
+              fi
               echo "Patching OLSConfig to add acs-mcp server..."
-              oc patch olsconfig cluster --type=merge -p '{
-                "spec": {
-                  "mcpServers": [
-                    {
-                      "name": "openshift-mcp",
-                      "url": "http://openshift-mcp-server.openshift-mcp.svc.cluster.local:8080/mcp",
-                      "timeout": 120,
-                      "headers": [
-                        {
-                          "name": "kubernetes-authorization",
-                          "valueFrom": {
-                            "type": "kubernetes"
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "name": "acs-mcp",
-                      "url": "https://acs-mcp-server-stackrox-mcp.{{ .Values.mcpNamespace }}.svc:443/mcp",
-                      "timeout": 120,
-                      "headers": [
-                        {
-                          "name": "Authorization",
-                          "valueFrom": {
-                            "type": "secret",
-                            "secretRef": {
-                              "name": "acs-mcp-api-token"
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  ]
-                }
-              }'
+              oc -n "${OLS_NS}" get olsconfig cluster -o json | MCP_URL="${MCP_URL}" python3 -c '
+              import json, os, sys
+              doc = json.load(sys.stdin)
+              spec = doc.get("spec") or {}
+              gates = list(spec.get("featureGates") or [])
+              if "MCPServer" not in gates:
+                  gates.append("MCPServer")
+              servers = [s for s in (spec.get("mcpServers") or []) if not (isinstance(s, dict) and s.get("name") == "acs-mcp")]
+              servers.append({
+                  "name": "acs-mcp",
+                  "url": os.environ["MCP_URL"],
+                  "timeout": 120,
+                  "headers": [{
+                      "name": "Authorization",
+                      "valueFrom": {
+                          "type": "secret",
+                          "secretRef": {"name": "acs-mcp-api-token"},
+                      },
+                  }],
+              })
+              json.dump({"spec": {"featureGates": gates, "mcpServers": servers}}, sys.stdout)
+              ' | oc -n "${OLS_NS}" patch olsconfig cluster --type=merge --patch-file=/dev/stdin
               echo "OLSConfig patched successfully"
