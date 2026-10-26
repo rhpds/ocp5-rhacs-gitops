@@ -13,7 +13,7 @@ subscription:
 catalogSource:
   enabled: true
   name: acs-nightly-catalog
-  image: quay.io/rhacs-eng/stackrox-operator-index:v5.0.0-rc.4-fast
+  image: quay.io/rhacs-eng/stackrox-operator-index:v4.12.0-nightly-20260729-fast
   displayName: ACS Nightly Catalog
 
 imageDigestMirrorSet:
