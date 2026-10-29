@@ -239,6 +239,10 @@ spec:
           enabled: {{ .Values.components.rhacs.installSecuredCluster }}
         pipelineHooks:
           buildNamespace: {{ .Values.components.networkPolicy.namespace | default "lw-poc-build" | quote }}
+          # Mint the CI token in module 7.2, after Central is up. A Sync hook
+          # here fails the Application when Central is not ready yet.
+          ciTokenJob:
+            enabled: false
 {{- if and .Values.components.gitea.enabled .Values.deployer.domain }}
           labRepoUrl: {{ printf "https://gitea.%s/lw-%s/%s.git" .Values.deployer.domain .Values.components.gitea.studentUsername .Values.components.gitea.repoName | quote }}
           labPythonRepoUrl: ""
@@ -318,6 +322,9 @@ spec:
           namespace: {{ .Values.components.admission.namespace }}
         rhtas:
           namespace: {{ .Values.components.rhtas.namespace | default "trusted-artifact-signer" }}
+        # Module 6.1 copies TUF material. The Sync hook fails before RHTAS is ready.
+        tufCopy:
+          enabled: false
         deployer:
           domain: {{ .Values.deployer.domain | quote }}
           apiUrl: {{ .Values.deployer.apiUrl | quote }}
@@ -449,6 +456,12 @@ spec:
         student:
           password: {{ .Values.student.password | quote }}
 {{- end }}
+        # Stage and prod Argo apps track learner repos before those labs.
+        # Modules 6.1 and 6.2 create lw-poc-staging and lw-poc-prod.
+        gitopsAppSet:
+          enabled: false
+        gitopsAppSetProd:
+          enabled: false
         deployer:
           domain: {{ .Values.deployer.domain | quote }}
           apiUrl: {{ .Values.deployer.apiUrl | quote }}
@@ -550,6 +563,9 @@ spec:
         renovate:
           enabled: {{ .Values.components.renovate.enabled }}
           namespace: {{ .Values.components.renovate.namespace }}
+        # Module 3.3 creates renovate-gitea-token. The Sync hook fails before Gitea is ready.
+        tokenJob:
+          enabled: false
         deployer:
           domain: {{ .Values.deployer.domain | quote }}
           apiUrl: {{ .Values.deployer.apiUrl | quote }}

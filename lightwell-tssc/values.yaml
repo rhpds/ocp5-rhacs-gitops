@@ -67,6 +67,8 @@ components:
     syncWave: "10"
 
   # Reuse the roadshow Central in rhacs-operator. Do not install a second ACS.
+  # applications.yaml sets pipelineHooks.ciTokenJob.enabled false. Module 7.2
+  # mints rhacs-ci-secrets after Central is up.
   rhacs:
     enabled: true
     namespace: rhacs-operator
@@ -75,6 +77,8 @@ components:
     installSecuredCluster: false
     syncWave: "10"
 
+  # applications.yaml sets tufCopy.enabled false. Module 6.1 copies RHTAS TUF
+  # material into tssc-admission/rhtas-tuf-keys.
   admission:
     enabled: true
     namespace: tssc-admission
@@ -85,6 +89,9 @@ components:
     namespace: lw-poc-build
     syncWave: "10"
 
+  # applications.yaml sets gitopsAppSet and gitopsAppSetProd enabled false.
+  # Modules 6.1 and 6.2 create Applications lw-poc-staging and lw-poc-prod.
+  # The student repos and gitea-student-repo-seed stay.
   gitea:
     enabled: true
     namespace: gitea
@@ -101,6 +108,8 @@ components:
     syncWave: "20"
     chartPath: lightwell-repo
 
+  # applications.yaml sets tokenJob.enabled false. Module 3.3 writes
+  # renovate/renovate-gitea-token before the Renovate CronJob can open a PR.
   renovate:
     enabled: true
     namespace: renovate
