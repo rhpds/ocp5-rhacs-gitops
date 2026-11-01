@@ -333,14 +333,12 @@ spec:
     namespace: {{ .Values.components.admission.namespace }}
   # TUF copy Job fills fulcio_v1.crt.pem / rekor.pub; do not let Helm wipe them.
   ignoreDifferences:
-    - group: ""
-      kind: Secret
+    - kind: Secret
       name: rhtas-tuf-keys
       jsonPointers:
         - /data
         - /stringData
-    - group: ""
-      kind: ConfigMap
+    - kind: ConfigMap
       name: lab-cosign-pubkey
       jsonPointers:
         - /data

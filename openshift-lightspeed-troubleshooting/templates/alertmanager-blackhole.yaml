@@ -12,8 +12,10 @@ metadata:
 spec:
   route:
     receiver: blackhole
-    match:
-      alertname: WorkshopBlackholeNeverFires
+    matchers:
+      - name: alertname
+        matchType: "="
+        value: WorkshopBlackholeNeverFires
   receivers:
     - name: blackhole
       webhookConfigs:

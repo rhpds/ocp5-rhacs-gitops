@@ -8,6 +8,7 @@ metadata:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
+  activeDeadlineSeconds: 1020
   template:
     spec:
       serviceAccountName: copy-central-ca
@@ -18,6 +19,7 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
+              set -euo pipefail
               SOURCE_NS="{{ .Values.acsNamespace }}"
               TARGET_NS="{{ .Values.targetNamespace }}"
               SOURCE_SECRET="{{ .Values.sourceSecret }}"
@@ -26,8 +28,20 @@ spec:
 
               echo "Copying CA cert from ${SOURCE_NS}/${SOURCE_SECRET} to ${TARGET_NS}/${TARGET_SECRET}..."
 
-              oc extract secret/"${SOURCE_SECRET}" -n "${SOURCE_NS}" --keys="${SOURCE_KEY}" --to=/tmp --confirm
-              CA_CERT=$(cat /tmp/${SOURCE_KEY})
+              # Central may still be installing when this independent app syncs.
+              # Wait up to 15 minutes without consuming the Job restart budget.
+              deadline=$((SECONDS + 900))
+              until oc extract secret/"${SOURCE_SECRET}" -n "${SOURCE_NS}" \
+                --keys="${SOURCE_KEY}" --to=/tmp --confirm --request-timeout=10s \
+                && [ -s "/tmp/${SOURCE_KEY}" ]; do
+                if (( SECONDS >= deadline )); then
+                  echo "ERROR: Timed out waiting for ${SOURCE_NS}/${SOURCE_SECRET} key ${SOURCE_KEY}"
+                  exit 1
+                fi
+                echo "Central CA not ready; retrying in 10s..."
+                sleep 10
+              done
+              CA_CERT=$(cat "/tmp/${SOURCE_KEY}")
 
               if [ -z "$CA_CERT" ]; then
                 echo "ERROR: Could not read ${SOURCE_KEY} from ${SOURCE_SECRET} in ${SOURCE_NS}"
