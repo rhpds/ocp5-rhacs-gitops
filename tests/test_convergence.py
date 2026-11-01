@@ -46,6 +46,16 @@ class ConvergenceTests(unittest.TestCase):
         self.assertEqual(svc["spec"]["selector"], deployment["spec"]["template"]["metadata"]["labels"])
         self.assertNotIn("annotation", deployment["metadata"])
 
+    def test_tekton_namespace_markers_are_ignored_narrowly(self):
+        app = next(d for d in render("app-of-apps")
+                   if d["metadata"]["name"] == "roadshow-demo-apps")
+        rule = next(r for r in app["spec"]["ignoreDifferences"] if r["kind"] == "Namespace")
+        markers = [p for p in rule["jqPathExpressions"] if "openshift-pipelines.tekton.dev/" in p]
+        self.assertEqual(set(markers), {
+            '.metadata.labels["openshift-pipelines.tekton.dev/namespace-reconcile-version"]',
+            '.metadata.labels["openshift-pipelines.tekton.dev/namespace-trusted-configmaps-version"]',
+        })
+
     def test_core_group_omission_does_not_drift(self):
         app = next(d for d in render("lightwell-tssc")
                    if d["metadata"]["name"] == "test-admission")
