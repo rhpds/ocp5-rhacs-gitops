@@ -7,15 +7,18 @@ spec:
     namespace: default
     server: https://kubernetes.default.svc
   project: default
-  source:
-    repoURL: {{ .Values.demoApps.repoURL }}
-    targetRevision: {{ .Values.demoApps.targetRevision }}
-    path: {{ .Values.demoApps.path }}
-    directory:
-      recurse: true
-      # Official wordpress / juice-shop images CrashLoop on restricted-v2 and
-      # are not used by the workshop labs (patient-portal, FAM, medical backend).
-      exclude: '{juice-shop/**,medical-application/frontend/**}'
+  sources:
+    - repoURL: {{ .Values.demoApps.repoURL }}
+      targetRevision: {{ .Values.demoApps.targetRevision }}
+      path: {{ .Values.demoApps.path }}
+      directory:
+        recurse: true
+        # CTF is maintained locally for OpenShift: the upstream manifest uses
+        # an unsupported LoadBalancer service and metadata.annotation.
+        exclude: '{juice-shop/**,medical-application/frontend/**,ctf-web-to-system/**}'
+    - repoURL: {{ .Values.gitops.repoURL }}
+      targetRevision: {{ .Values.gitops.targetRevision }}
+      path: roadshow-ctf
   # OpenShift syncs PSA labels from the privileged SCC grant in roadshow-prereqs.
   # Ignore those labels so selfHeal does not revert enforce=restricted.
   ignoreDifferences:

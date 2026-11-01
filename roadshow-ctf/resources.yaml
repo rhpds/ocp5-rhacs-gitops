@@ -1,0 +1,46 @@
+# OpenShift adaptation of mfosterrox/demo-apps/kubernetes-manifests/ctf-web-to-system/ctf-w2s.yml.
+# Keep this vulnerable lab service internal; external access is not needed by the active lab.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ctf-web-to-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ctf-web-to-system-service
+  namespace: ctf-web-to-system
+spec:
+  selector:
+    app: ctf-web-to-system
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 9090
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ctf-web-to-system
+  namespace: ctf-web-to-system
+  labels:
+    app: ctf-web-to-system
+    demo: roadshow
+  annotations:
+    app: ctf-web-to-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ctf-web-to-system
+  template:
+    metadata:
+      labels:
+        app: ctf-web-to-system
+    spec:
+      containers:
+      - name: ctf-web-container
+        image: quay.io/jechoisec/ctf-web-to-system-01
+        ports:
+        - containerPort: 9090
