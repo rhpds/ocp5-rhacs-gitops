@@ -25,6 +25,9 @@ spec:
     - group: ""
       kind: Namespace
       jqPathExpressions:
+        # Tekton owns its namespace reconciliation/version markers.
+        - .metadata.labels["openshift-pipelines.tekton.dev/namespace-reconcile-version"]
+        - .metadata.labels["openshift-pipelines.tekton.dev/namespace-trusted-configmaps-version"]
         - .metadata.labels["pod-security.kubernetes.io/enforce"]
         - .metadata.labels["pod-security.kubernetes.io/enforce-version"]
         - .metadata.labels["pod-security.kubernetes.io/audit"]
