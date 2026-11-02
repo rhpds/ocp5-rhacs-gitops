@@ -6,8 +6,13 @@ metadata:
   namespace: {{ .Values.namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
-  activeDeadlineSeconds: 1800
+  # Covers parallel builds (600s), CVO build (900s), target creation (900s),
+  # both rollouts (300s each), and API/image-pull overhead.
+  activeDeadlineSeconds: 3900
+  backoffLimit: 2
   template:
     metadata:
       labels:
@@ -37,13 +42,14 @@ spec:
                 local name="$1"
                 local timeout="${2:-600}"
                 echo "Waiting for build ${name} (timeout ${timeout}s)..."
-                local elapsed=0
-                while [ $elapsed -lt $timeout ]; do
-                  local phase=$(oc get build "${name}" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+                local deadline=$((SECONDS + timeout))
+                while (( SECONDS < deadline )); do
+                  local phase
+                  phase=$(oc get build "${name}" -n "$NS" --request-timeout=15s -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
                   case "$phase" in
                     Complete) echo "Build ${name} completed"; return 0 ;;
                     Failed|Error|Cancelled) echo "Build ${name} failed: ${phase}"; return 1 ;;
-                    *) sleep 10; elapsed=$((elapsed + 10)) ;;
+                    *) sleep 10 ;;
                   esac
                 done
                 echo "Build ${name} timed out after ${timeout}s"
@@ -58,16 +64,53 @@ spec:
                 oc get imagestream "$1" -n "$NS" -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}'
               }
 
-              # ── Step 1: Build agentic-skills and cluster-update console (parallel) ──
-              echo "=== Building agentic-skills and cluster-update console ==="
-              oc start-build agentic-skills -n "$NS"
-              oc start-build cluster-update-console -n "$NS"
-              sleep 5
-              wait_for_build "$(get_latest_build agentic-skills)" &
+              # Hash build inputs, not generation/trigger bookkeeping (which changes
+              # when a build starts). Only completed, matching builds are reusable.
+              ensure_build() {
+                local config="$1" timeout="$2" inputs="$3"
+                shift 3
+                local identity signature latest phase previous
+                identity=$(oc get buildconfig "$config" -n "$NS" --request-timeout=15s -o jsonpath='{.metadata.uid}{.spec.source}{.spec.strategy}{.spec.output}{.spec.resources}{.spec.nodeSelector}{.spec.serviceAccount}')
+                signature=$(printf '%s\n%s\n' "$identity" "$inputs" | sha256sum | cut -d' ' -f1)
+                latest=$(get_latest_build "$config" || true)
+                if [ -n "$latest" ]; then
+                  phase=$(oc get build "$latest" -n "$NS" --request-timeout=15s -o jsonpath='{.status.phase}')
+                  previous=$(oc get build "$latest" -n "$NS" --request-timeout=15s -o jsonpath='{.metadata.annotations.roadshow\.rhpds\.com/build-inputs}')
+                  if [ "$phase" = Complete ] && [ "$previous" = "$signature" ]; then
+                    echo "Reusing successful build ${latest}"
+                    return 0
+                  fi
+                fi
+                latest=$(oc start-build "$config" -n "$NS" "$@" -o name)
+                latest="${latest##*/}"
+                wait_for_build "$latest" "$timeout"
+                oc annotate build "$latest" -n "$NS" "roadshow.rhpds.com/build-inputs=$signature" --overwrite
+              }
+
+              wait_for_deployment() {
+                local namespace="$1" name="$2" timeout="$3"
+                local deadline=$((SECONDS + timeout))
+                until oc get deployment "$name" -n "$namespace" --request-timeout=15s >/dev/null 2>&1; do
+                  if (( SECONDS >= deadline )); then
+                    echo "ERROR: Timed out waiting for deployment ${namespace}/${name}"
+                    return 1
+                  fi
+                  echo "Waiting for deployment ${namespace}/${name} to exist..."
+                  sleep 10
+                done
+              }
+
+              # ── Step 1: Build or reuse skills and console images (parallel) ──
+              echo "=== Ensuring agentic-skills and cluster-update console builds ==="
+              ensure_build agentic-skills 600 "" &
               PID1=$!
-              wait_for_build "$(get_latest_build cluster-update-console)" 600 &
+              ensure_build cluster-update-console 600 "" &
               PID2=$!
-              wait $PID1 $PID2
+              # Check both statuses: wait PID1 PID2 alone can mask PID1 failure.
+              build_failed=0
+              wait "$PID1" || build_failed=1
+              wait "$PID2" || build_failed=1
+              [ "$build_failed" -eq 0 ] || exit 1
               SKILLS_IMAGE=$(get_image_ref agentic-skills)
               CLUSTER_UPDATE_CONSOLE_IMAGE=$(get_image_ref cluster-update-console-plugin)
               echo "Skills image: ${SKILLS_IMAGE}"
@@ -123,9 +166,9 @@ spec:
               # Remove leading whitespace from heredoc indentation
               sed -i 's/^              //' "${BUILDDIR}/Dockerfile"
 
-              oc start-build cvo-patched -n "$NS" --from-dir="${BUILDDIR}"
-              sleep 5
-              wait_for_build "$(get_latest_build cvo-patched)" 900
+              CVO_INPUTS=$(cat "${BUILDDIR}/Dockerfile" "${BUILDDIR}/patch-image-references.py" | sha256sum | cut -d' ' -f1)
+              ensure_build cvo-patched 900 "$CVO_INPUTS" --from-dir="${BUILDDIR}"
+              rm -rf "$BUILDDIR"
 
               # ── Step 4: Grant image-puller access ──
               echo "=== Granting image-puller access ==="
@@ -142,15 +185,17 @@ spec:
                 {\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/args/1\",\"value\":\"--release-image=${CVO_IMAGE}\"},
                 {\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/imagePullPolicy\",\"value\":\"Always\"}
               ]" 2>&1 | grep -v Warning
-              oc rollout status deployment/cluster-version-operator -n openshift-cluster-version --timeout=120s
+              oc rollout status deployment/cluster-version-operator -n openshift-cluster-version --timeout=300s
 
               # ── Step 6: Patch cluster-update console plugin deployment ──
               echo "=== Patching cluster-update console plugin ==="
               CLUSTER_UPDATE_IMAGE=$(get_image_ref cluster-update-console-plugin)
 
+              # The patched CVO creates this deployment asynchronously.
+              wait_for_deployment openshift-cluster-update-console-plugin cluster-update-console-plugin 900
               oc set image deployment/cluster-update-console-plugin \
                 -n openshift-cluster-update-console-plugin plugin="${CLUSTER_UPDATE_IMAGE}"
 
-              oc rollout status deployment/cluster-update-console-plugin -n openshift-cluster-update-console-plugin --timeout=180s
+              oc rollout status deployment/cluster-update-console-plugin -n openshift-cluster-update-console-plugin --timeout=300s
 
               echo "=== All builds and deployments complete ==="

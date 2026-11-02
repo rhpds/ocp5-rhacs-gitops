@@ -62,14 +62,38 @@ class ConvergenceTests(unittest.TestCase):
         for rule in app["spec"]["ignoreDifferences"]:
             self.assertNotEqual(rule.get("group"), "")
 
-    def test_ca_copy_is_bounded_and_fail_fast(self):
-        job = next(d for d in render("rhacs-mcp-server-prereqs") if d["kind"] == "Job")
-        self.assertEqual(job["spec"]["activeDeadlineSeconds"], 1020)
-        script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+    def test_ca_copy_reconciles_after_failed_runs(self):
+        cron = next(d for d in render("rhacs-mcp-server-prereqs") if d["kind"] == "CronJob")
+        self.assertEqual(cron["spec"]["schedule"], "* * * * *")
+        self.assertEqual(cron["spec"]["concurrencyPolicy"], "Forbid")
+        self.assertNotIn("argocd.argoproj.io/hook", cron["metadata"].get("annotations", {}))
+        job = cron["spec"]["jobTemplate"]["spec"]
+        self.assertEqual(job["activeDeadlineSeconds"], 90)
+        script = job["template"]["spec"]["containers"][0]["args"][0]
         self.assertIn("set -euo pipefail", script)
-        self.assertIn("SECONDS + 900", script)
-        self.assertIn("SECONDS >= deadline", script)
-        self.assertIn('--request-timeout=10s', script)
+        self.assertIn('--request-timeout=15s', script)
+        subprocess.run(["bash", "-n"], input=script, text=True, check=True)
+
+    def test_quay_declares_operator_defaults(self):
+        registry = next(d for d in render("quay") if d["kind"] == "QuayRegistry")
+        components = registry["spec"]["components"]
+        self.assertEqual(len(components), 11)
+        self.assertEqual(len({c["kind"] for c in components}), len(components))
+        for kind in ("quay", "clairpostgres"):
+            self.assertEqual(next(c for c in components if c["kind"] == kind),
+                             {"kind": kind, "managed": True})
+
+    def test_build_job_can_be_retried_and_waits_for_target(self):
+        job = next(d for d in render("agentic-updates-builds") if d["kind"] == "Job")
+        self.assertEqual(job["metadata"]["annotations"]["argocd.argoproj.io/hook"], "Sync")
+        self.assertEqual(job["metadata"]["annotations"]["argocd.argoproj.io/hook-delete-policy"],
+                         "BeforeHookCreation")
+        self.assertGreaterEqual(job["spec"]["activeDeadlineSeconds"], 3600)
+        script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        self.assertLess(script.index("wait_for_deployment openshift-cluster-update-console-plugin"),
+                        script.index("oc set image deployment/cluster-update-console-plugin"))
+        self.assertIn('wait "$PID1" || build_failed=1', script)
+        self.assertIn('wait "$PID2" || build_failed=1', script)
         subprocess.run(["bash", "-n"], input=script, text=True, check=True)
 
 
