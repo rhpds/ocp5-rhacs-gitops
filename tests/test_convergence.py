@@ -85,9 +85,9 @@ class ConvergenceTests(unittest.TestCase):
 
     def test_build_job_can_be_retried_and_waits_for_target(self):
         job = next(d for d in render("agentic-updates-builds") if d["kind"] == "Job")
-        self.assertEqual(job["metadata"]["annotations"]["argocd.argoproj.io/hook"], "Sync")
-        self.assertEqual(job["metadata"]["annotations"]["argocd.argoproj.io/hook-delete-policy"],
-                         "BeforeHookCreation")
+        self.assertNotIn("argocd.argoproj.io/hook", job["metadata"]["annotations"])
+        self.assertEqual(job["metadata"]["annotations"]["argocd.argoproj.io/sync-options"],
+                         "Force=true,Replace=true")
         self.assertGreaterEqual(job["spec"]["activeDeadlineSeconds"], 3600)
         script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
         self.assertLess(script.index("wait_for_deployment openshift-cluster-update-console-plugin"),

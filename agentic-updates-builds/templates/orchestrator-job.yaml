@@ -6,8 +6,9 @@ metadata:
   namespace: {{ .Values.namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Keep a regular Job so app health remains Progressing/Degraded until
+    # it completes. Replace on sync to recover failed/immutable Jobs safely.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
   # Covers parallel builds (600s), CVO build (900s), target creation (900s),
   # both rollouts (300s each), and API/image-pull overhead.
