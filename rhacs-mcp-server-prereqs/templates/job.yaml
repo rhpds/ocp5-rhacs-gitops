@@ -1,56 +1,55 @@
 ---
+# Reconcile independently of the RHACS install duration. A failed run must not
+# permanently strand MCP when Central becomes ready after Argo's hook retries.
 apiVersion: batch/v1
-kind: Job
+kind: CronJob
 metadata:
   name: copy-central-ca
   namespace: {{ .Values.targetNamespace }}
-  annotations:
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
-  activeDeadlineSeconds: 1020
-  template:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
     spec:
-      serviceAccountName: copy-central-ca
-      restartPolicy: OnFailure
-      containers:
-        - name: copy-ca
-          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
-          command: ["/bin/bash", "-c"]
-          args:
-            - |
-              set -euo pipefail
-              SOURCE_NS="{{ .Values.acsNamespace }}"
-              TARGET_NS="{{ .Values.targetNamespace }}"
-              SOURCE_SECRET="{{ .Values.sourceSecret }}"
-              TARGET_SECRET="{{ .Values.targetSecret }}"
-              SOURCE_KEY="{{ .Values.sourceKey }}"
+      activeDeadlineSeconds: 90
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: copy-central-ca
+          restartPolicy: Never
+          containers:
+            - name: copy-ca
+              image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  SOURCE_NS="{{ .Values.acsNamespace }}"
+                  TARGET_NS="{{ .Values.targetNamespace }}"
+                  SOURCE_SECRET="{{ .Values.sourceSecret }}"
+                  TARGET_SECRET="{{ .Values.targetSecret }}"
+                  SOURCE_KEY="{{ .Values.sourceKey }}"
+                  workdir=$(mktemp -d)
+                  trap 'rm -rf "$workdir"' EXIT
 
-              echo "Copying CA cert from ${SOURCE_NS}/${SOURCE_SECRET} to ${TARGET_NS}/${TARGET_SECRET}..."
+                  echo "Reconciling Central CA from ${SOURCE_NS}/${SOURCE_SECRET}..."
+                  if ! oc extract secret/"${SOURCE_SECRET}" -n "${SOURCE_NS}" \
+                    --keys="${SOURCE_KEY}" --to="$workdir" --confirm --request-timeout=15s \
+                    || [ ! -s "$workdir/${SOURCE_KEY}" ]; then
+                    echo "Central CA not ready; the next scheduled run will retry."
+                    exit 1
+                  fi
 
-              # Central may still be installing when this independent app syncs.
-              # Wait up to 15 minutes without consuming the Job restart budget.
-              deadline=$((SECONDS + 900))
-              until oc extract secret/"${SOURCE_SECRET}" -n "${SOURCE_NS}" \
-                --keys="${SOURCE_KEY}" --to=/tmp --confirm --request-timeout=10s \
-                && [ -s "/tmp/${SOURCE_KEY}" ]; do
-                if (( SECONDS >= deadline )); then
-                  echo "ERROR: Timed out waiting for ${SOURCE_NS}/${SOURCE_SECRET} key ${SOURCE_KEY}"
-                  exit 1
-                fi
-                echo "Central CA not ready; retrying in 10s..."
-                sleep 10
-              done
-              CA_CERT=$(cat "/tmp/${SOURCE_KEY}")
-
-              if [ -z "$CA_CERT" ]; then
-                echo "ERROR: Could not read ${SOURCE_KEY} from ${SOURCE_SECRET} in ${SOURCE_NS}"
-                exit 1
-              fi
-
-              oc create secret generic "${TARGET_SECRET}" \
-                -n "${TARGET_NS}" \
-                --from-literal=ca.crt="$CA_CERT" \
-                --dry-run=client -o yaml | oc apply -f -
-
-              echo "CA cert copied successfully"
+                  oc create secret generic "${TARGET_SECRET}" -n "${TARGET_NS}" \
+                    --from-file="ca.crt=$workdir/${SOURCE_KEY}" \
+                    --dry-run=client -o yaml | oc apply --request-timeout=15s -f -
+                  echo "Central CA reconciled successfully"
