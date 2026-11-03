@@ -57,10 +57,40 @@ class ConvergenceTests(unittest.TestCase):
         })
 
     def test_core_group_omission_does_not_drift(self):
-        app = next(d for d in render("lightwell-tssc")
-                   if d["metadata"]["name"] == "test-admission")
-        for rule in app["spec"]["ignoreDifferences"]:
-            self.assertNotEqual(rule.get("group"), "")
+        for app in render("lightwell-tssc"):
+            if app["kind"] != "Application":
+                continue
+            for rule in app["spec"].get("ignoreDifferences", []):
+                self.assertNotEqual(rule.get("group"), "", app["metadata"]["name"])
+
+    def test_keycloak_bootstrap_uses_bounded_internal_admin_requests(self):
+        job = next(d for d in render("openshift-mcp-server") if d["kind"] == "Job")
+        script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        self.assertIn('ADMIN_URL="https://keycloak.keycloak.svc:8443"', script)
+        self.assertIn('SSO_URL="https://sso.', script)
+        self.assertNotIn('${SSO_URL}/', script)
+        self.assertIn('--data-urlencode "password=${ADMIN_PASS}"', script)
+        self.assertEqual(job["spec"]["activeDeadlineSeconds"], 600)
+        for line in script.splitlines():
+            if 'curl ' in line:
+                self.assertIn('--connect-timeout 5 --max-time 30', line)
+                self.assertIn('-fsSk', line)
+        subprocess.run(["bash", "-n"], input=script, text=True, check=True)
+
+    def test_vsock_waits_for_real_admission(self):
+        docs = render("rhacs-virt")
+        job = next(d for d in docs if d["kind"] == "Job")
+        script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        self.assertIn('set -euo pipefail', script)
+        self.assertIn('until gate_enabled && oc create --dry-run=server', script)
+        self.assertIn('SECONDS + 600', script)
+        role = next(d for d in docs if d["kind"] == "Role")
+        self.assertEqual(role["rules"][0]["resources"], ["virtualmachines"])
+        self.assertEqual(role["rules"][0]["verbs"], ["create"])
+        reader = next(d for d in docs if d["kind"] == "ClusterRole")
+        self.assertTrue(any(r["resources"] == ["kubevirts"] and r["verbs"] == ["get"]
+                            for r in reader["rules"]))
+        subprocess.run(["bash", "-n"], input=script, text=True, check=True)
 
     def test_ca_copy_reconciles_after_failed_runs(self):
         cron = next(d for d in render("rhacs-mcp-server-prereqs") if d["kind"] == "CronJob")

@@ -1,6 +1,9 @@
 namespace: openshift-mcp
 clusterSubdomain: ""
 name: openshift-mcp-server
+
+keycloak:
+  adminUrl: https://keycloak.keycloak.svc:8443
 image: registry.redhat.io/openshift-mcp-tech-preview/openshift-mcp-server-rhel9:0.3
 
 toolsets:

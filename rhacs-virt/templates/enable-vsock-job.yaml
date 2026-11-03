@@ -8,10 +8,12 @@ metadata:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
+  activeDeadlineSeconds: 660
+  backoffLimit: 2
   template:
     spec:
       serviceAccountName: enable-vsock
-      restartPolicy: OnFailure
+      restartPolicy: Never
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -26,18 +28,34 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
-              echo "Checking VSOCK feature gate..."
-              CURRENT=$(oc get kubevirt kubevirt-kubevirt-hyperconverged -n openshift-cnv -o json | \
-                python3 -c "import sys,json; gates=json.load(sys.stdin).get('spec',{}).get('configuration',{}).get('developerConfiguration',{}).get('featureGates',[]); print('VSOCK' in gates)")
+              set -euo pipefail
+              gate_enabled() {
+                oc get kubevirt kubevirt-kubevirt-hyperconverged -n openshift-cnv \
+                  --request-timeout=15s -o json | python3 -c \
+                  "import sys,json; gates=json.load(sys.stdin).get('spec',{}).get('configuration',{}).get('developerConfiguration',{}).get('featureGates',[]); sys.exit(0 if 'VSOCK' in gates else 1)"
+              }
 
-              if [ "$CURRENT" = "True" ]; then
-                echo "VSOCK feature gate already enabled"
-                exit 0
+              if ! gate_enabled; then
+                echo "Requesting VSOCK through HyperConverged..."
+                oc annotate hyperconverged kubevirt-hyperconverged -n openshift-cnv \
+                  'kubevirt.kubevirt.io/jsonpatch=[{"op":"add","path":"/spec/configuration/developerConfiguration/featureGates/-","value":"VSOCK"}]' \
+                  --overwrite --request-timeout=15s
               fi
 
-              echo "Enabling VSOCK via HyperConverged annotation..."
-              oc annotate hyperconverged kubevirt-hyperconverged -n openshift-cnv \
-                'kubevirt.kubevirt.io/jsonpatch=[{"op":"add","path":"/spec/configuration/developerConfiguration/featureGates/-","value":"VSOCK"}]' \
-                --overwrite
-
-              echo "VSOCK feature gate enabled"
+              # The HCO annotation is asynchronous. Also wait for the admission
+              # webhook to accept VSOCK, not just for the KubeVirt spec to change.
+              probe=$(mktemp)
+              trap 'rm -f "$probe"' EXIT
+              cat > "$probe" <<'JSON'
+              {"apiVersion":"kubevirt.io/v1","kind":"VirtualMachine","metadata":{"name":"vsock-readiness-probe","namespace":"{{ .Release.Namespace }}"},"spec":{"runStrategy":"Halted","template":{"spec":{"domain":{"devices":{"autoattachVSOCK":true},"resources":{"requests":{"memory":"128Mi"}}}}}}}
+              JSON
+              deadline=$((SECONDS + 600))
+              until gate_enabled && oc create --dry-run=server --request-timeout=15s -f "$probe" >/dev/null; do
+                if (( SECONDS >= deadline )); then
+                  echo "ERROR: Timed out waiting for VSOCK admission readiness"
+                  exit 1
+                fi
+                echo "Waiting for VSOCK configuration and admission readiness..."
+                sleep 10
+              done
+              echo "VSOCK admission is ready; the VM can now be created"

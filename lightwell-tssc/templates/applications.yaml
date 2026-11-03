@@ -189,8 +189,7 @@ spec:
   # class; storageClassName is immutable (#101). Ignore that pointer so this
   # claim stays Synced; next claim Binds Immediate and the ignore is a no-op.
   ignoreDifferences:
-    - group: ""
-      kind: PersistentVolumeClaim
+    - kind: PersistentVolumeClaim
       name: storage
       jsonPointers:
         - /spec/storageClassName
@@ -265,14 +264,12 @@ spec:
     namespace: {{ .Values.components.rhacs.namespace }}
   # Preserve patched rox-api-token on rhacs-ci-secrets (Helm only manages endpoint).
   ignoreDifferences:
-    - group: ""
-      kind: Secret
+    - kind: Secret
       name: rhacs-ci-secrets
       jsonPointers:
         - /data
         - /stringData
-    - group: ""
-      kind: Namespace
+    - kind: Namespace
       jqPathExpressions:
         - .metadata.labels["kubernetes.io/metadata.name"]
         - .metadata.labels["pod-security.kubernetes.io/enforce"]
@@ -392,8 +389,7 @@ spec:
       name: build-egress
       jsonPointers:
         - /spec
-    - group: ""
-      kind: Namespace
+    - kind: Namespace
       jqPathExpressions:
         - .metadata.labels["kubernetes.io/metadata.name"]
         - .metadata.labels["pod-security.kubernetes.io/enforce"]
@@ -522,8 +518,7 @@ spec:
   "stub-04-remediated-pin"
   "stub-18-blast-radius"
 }}
-    - group: ""
-      kind: ConfigMap
+    - kind: ConfigMap
       name: {{ $name | quote }}
       jsonPointers:
         - /data
@@ -572,8 +567,7 @@ spec:
     namespace: {{ .Values.components.renovate.namespace }}
   # Token Job fills renovate-gitea-token; do not let Helm wipe it.
   ignoreDifferences:
-    - group: ""
-      kind: Secret
+    - kind: Secret
       name: renovate-gitea-token
       jsonPointers:
         - /data
@@ -797,8 +791,7 @@ spec:
   "report-17-sbom-sor"
   "report-18-vex-acs"
 }}
-    - group: ""
-      kind: ConfigMap
+    - kind: ConfigMap
       name: {{ $name | quote }}
       jsonPointers:
         - /data
