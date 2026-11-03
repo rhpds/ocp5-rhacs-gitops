@@ -9,3 +9,37 @@ rules:
   - apiGroups: ["hco.kubevirt.io"]
     resources: ["hyperconvergeds"]
     verbs: ["get", "patch"]
+  - apiGroups: ["kubevirt.io"]
+    resources: ["kubevirts"]
+    resourceNames: ["kubevirt-kubevirt-hyperconverged"]
+    verbs: ["get"]
+---
+# Server dry-run needs create permission, scoped to this lab's VM namespace.
+# The readiness probe is never persisted.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: enable-vsock-admission-probe
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+  - apiGroups: ["kubevirt.io"]
+    resources: ["virtualmachines"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: enable-vsock-admission-probe
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: enable-vsock-admission-probe
+subjects:
+  - kind: ServiceAccount
+    name: enable-vsock
+    namespace: {{ .Release.Namespace }}

@@ -1,0 +1,8 @@
+---
+# Only deployed by the isolated recovery smoke test, never by app-of-apps.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bootstrap-recovery-validation
+data:
+  purpose: bounded-recovery-smoke-test

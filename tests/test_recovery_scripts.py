@@ -40,6 +40,16 @@ elif a[:1] == ['extract']:
     pathlib.Path(directory, 'ca.pem').write_text('test-certificate')
 elif a[:3] == ['create', 'secret', 'generic']:
     print('fake-secret-manifest')
+elif a[:2] == ['get', 'kubevirt']:
+    print(json.dumps({'spec': {'configuration': {'developerConfiguration': {
+        'featureGates': ['VSOCK'] if s.get('gate') else []}}}}))
+elif a[:2] == ['annotate', 'hyperconverged']:
+    s['gate'] = True
+    save()
+elif a[:1] == ['create'] and '--dry-run=server' in a:
+    s['probe_checks'] = s.get('probe_checks', 0) + 1
+    save()
+    sys.exit(0 if s['probe_checks'] > s.get('webhook_delay', 0) else 1)
 elif a[:1] == ['apply']:
     sys.stdin.read()
     if s.get('apply_fails'):
@@ -95,6 +105,25 @@ class RecoveryScriptTests(unittest.TestCase):
         result = self.run_script(self.functions + '\nwait_for_deployment test target 0')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Timed out', result.stdout)
+
+    def vsock_script(self):
+        job = next(d for d in render('rhacs-virt') if d['kind'] == 'Job')
+        return job['spec']['template']['spec']['containers'][0]['args'][0]
+
+    def test_vsock_waits_through_delayed_webhook_configuration(self):
+        self.state.write_text(json.dumps({'webhook_delay': 2}))
+        result = self.run_script(self.vsock_script())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        state = json.loads(self.state.read_text())
+        self.assertTrue(state['gate'])
+        self.assertEqual(state['probe_checks'], 3)
+
+    def test_vsock_probe_failure_is_bounded(self):
+        self.state.write_text(json.dumps({'gate': True, 'webhook_delay': 100}))
+        script = self.vsock_script().replace('SECONDS + 600', 'SECONDS + 0')
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Timed out waiting for VSOCK', result.stdout)
 
     def ca_script(self):
         cron = next(d for d in render('rhacs-mcp-server-prereqs') if d['kind'] == 'CronJob')

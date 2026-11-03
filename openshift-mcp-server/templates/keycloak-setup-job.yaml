@@ -9,13 +9,15 @@ metadata:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
+  activeDeadlineSeconds: 600
+  backoffLimit: 2
   template:
     metadata:
       labels:
         app: mcp-server-keycloak-setup
     spec:
       serviceAccountName: keycloak-mcp-server-setup
-      restartPolicy: OnFailure
+      restartPolicy: Never
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -36,15 +38,27 @@ spec:
               NAMESPACE="{{ .Release.Namespace }}"
               SECRET_NAME="mcp-user-credentials"
               SSO_URL="https://sso.{{ .Values.clusterSubdomain }}"
+              # Bootstrap requests stay inside the cluster; users retain public OIDC URLs.
+              ADMIN_URL={{ .Values.keycloak.adminUrl | quote }}
               REALM="keycloak"
               echo "Keycloak URL: ${SSO_URL}"
 
               ADMIN_USER=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.username}' | base64 -d)
               ADMIN_PASS=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.password}' | base64 -d)
 
-              ADMIN_TOKEN=$(curl -sk -X POST "${SSO_URL}/realms/master/protocol/openid-connect/token" \
-                -d "grant_type=password&client_id=admin-cli&username=${ADMIN_USER}&password=${ADMIN_PASS}" | \
-                python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+              deadline=$((SECONDS + 300))
+              until ADMIN_TOKEN=$(curl -fsSk --connect-timeout 5 --max-time 30 \
+                -X POST "${ADMIN_URL}/realms/master/protocol/openid-connect/token" \
+                --data-urlencode "grant_type=password" --data-urlencode "client_id=admin-cli" \
+                --data-urlencode "username=${ADMIN_USER}" --data-urlencode "password=${ADMIN_PASS}" | \
+                python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"); do
+                if (( SECONDS >= deadline )); then
+                  echo "ERROR: Timed out waiting for Keycloak admin authentication"
+                  exit 1
+                fi
+                echo "Keycloak admin endpoint not ready; retrying in 10s..."
+                sleep 10
+              done
 
               # Generate or retrieve passwords
               generate_password() {
@@ -71,20 +85,20 @@ spec:
 
               {{- range .Values.users }}
               USER_PASS="${PASS_{{ .username | upper | replace "-" "_" }}}"
-              EXISTING=$(curl -sk "${SSO_URL}/admin/realms/${REALM}/users?username={{ .username }}&exact=true" \
+              EXISTING=$(curl -fsSk --connect-timeout 5 --max-time 30 "${ADMIN_URL}/admin/realms/${REALM}/users?username={{ .username }}&exact=true" \
                 -H "Authorization: Bearer ${ADMIN_TOKEN}" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
               if [ "$EXISTING" = "0" ]; then
                 echo "Creating user {{ .username }}..."
-                curl -sk -X POST "${SSO_URL}/admin/realms/${REALM}/users" \
+                curl -fsSk --connect-timeout 5 --max-time 30 -X POST "${ADMIN_URL}/admin/realms/${REALM}/users" \
                   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
                   -H "Content-Type: application/json" \
                   -d "{\"username\":\"{{ .username }}\",\"enabled\":true,\"emailVerified\":true,\"email\":\"{{ .email }}\",\"firstName\":\"{{ .firstName }}\",\"lastName\":\"{{ .lastName }}\",\"credentials\":[{\"type\":\"password\",\"value\":\"${USER_PASS}\",\"temporary\":false}]}"
                 echo "User {{ .username }} created"
               else
                 echo "User {{ .username }} already exists, updating password..."
-                USER_ID=$(curl -sk "${SSO_URL}/admin/realms/${REALM}/users?username={{ .username }}&exact=true" \
+                USER_ID=$(curl -fsSk --connect-timeout 5 --max-time 30 "${ADMIN_URL}/admin/realms/${REALM}/users?username={{ .username }}&exact=true" \
                   -H "Authorization: Bearer ${ADMIN_TOKEN}" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
-                curl -sk -X PUT "${SSO_URL}/admin/realms/${REALM}/users/${USER_ID}/reset-password" \
+                curl -fsSk --connect-timeout 5 --max-time 30 -X PUT "${ADMIN_URL}/admin/realms/${REALM}/users/${USER_ID}/reset-password" \
                   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
                   -H "Content-Type: application/json" \
                   -d "{\"type\":\"password\",\"value\":\"${USER_PASS}\",\"temporary\":false}"
