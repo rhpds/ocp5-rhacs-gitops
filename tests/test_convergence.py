@@ -119,6 +119,13 @@ class ConvergenceTests(unittest.TestCase):
         values = app["spec"]["source"]["helm"]["valuesObject"]["subscription"]
         self.assertEqual(values["source"], "redhat-operators")
         self.assertEqual(values["channel"], "release-5.0")
+        ignored = next(r for r in app["spec"]["ignoreDifferences"]
+                       if r["kind"] == "MultiClusterHub")
+        self.assertEqual(set(ignored["jqPathExpressions"]), {
+            ".spec.overrides",
+            ".spec.localClusterName",
+            ".spec.networkPolicies",
+        })
         docs = [doc for doc in yaml.safe_load_all(subprocess.check_output(
             ["helm", "template", "acm", str(ROOT / "acm"),
              "--namespace", "open-cluster-management"],

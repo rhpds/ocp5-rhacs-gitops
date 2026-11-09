@@ -3,6 +3,14 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 {{ include "app-of-apps.metadata" (dict "name" .Values.acm.name "namespace" .Values.argocd.namespace "syncWave" "0") }}
 spec:
+  # The hub operator fills component defaults that are not declared in git.
+  ignoreDifferences:
+    - group: operator.open-cluster-management.io
+      kind: MultiClusterHub
+      jqPathExpressions:
+        - .spec.overrides
+        - .spec.localClusterName
+        - .spec.networkPolicies
   destination:
     namespace: {{ .Values.acm.namespace }}
     server: https://kubernetes.default.svc
