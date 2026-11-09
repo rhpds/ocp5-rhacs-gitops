@@ -1,0 +1,17 @@
+subscription:
+  channel: release-5.0
+  installPlanApproval: Automatic
+  name: advanced-cluster-management
+  # ACM 5.0 is in the live catalog. The v4.22 snapshot used by the other
+  # operators only publishes 2.16 and 2.17, which do not support OpenShift 5.
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+
+hub:
+  name: multiclusterhub
+  # Basic is one replica. The console plugin and governance add-on still
+  # install. High is the operator default and is much larger on a shared lab.
+  availabilityConfig: Basic
+
+console:
+  plugin: acm

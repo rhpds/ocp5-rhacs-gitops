@@ -35,6 +35,12 @@ acsVirt:
   namespace: rhacs-virt
   password: "roadshow"
 
+# Advanced Cluster Management 5.0. The v4.22 catalog snapshot does not ship it.
+acm:
+  enabled: true
+  name: acm
+  namespace: open-cluster-management
+
 # Google Online Boutique. ACS labs scan roadshow-demo-apps, not this namespace.
 acsMicroservicesDemo:
   enabled: false

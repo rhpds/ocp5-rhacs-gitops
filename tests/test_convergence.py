@@ -113,6 +113,31 @@ class ConvergenceTests(unittest.TestCase):
             self.assertEqual(next(c for c in components if c["kind"] == kind),
                              {"kind": kind, "managed": True})
 
+    def test_acm_uses_live_catalog_and_enables_console(self):
+        app = next(d for d in render("app-of-apps") if d["metadata"]["name"] == "acm")
+        self.assertEqual(app["spec"]["source"]["path"], "acm")
+        values = app["spec"]["source"]["helm"]["valuesObject"]["subscription"]
+        self.assertEqual(values["source"], "redhat-operators")
+        self.assertEqual(values["channel"], "release-5.0")
+        docs = [doc for doc in yaml.safe_load_all(subprocess.check_output(
+            ["helm", "template", "acm", str(ROOT / "acm"),
+             "--namespace", "open-cluster-management"],
+            text=True,
+        )) if doc]
+        sub = next(d for d in docs if d["kind"] == "Subscription")
+        self.assertEqual(sub["spec"]["name"], "advanced-cluster-management")
+        self.assertEqual(sub["spec"]["source"], "redhat-operators")
+        self.assertEqual(sub["spec"]["channel"], "release-5.0")
+        self.assertEqual(sub["metadata"]["namespace"], "open-cluster-management")
+        hub = next(d for d in docs if d["kind"] == "MultiClusterHub")
+        self.assertEqual(hub["metadata"]["name"], "multiclusterhub")
+        self.assertEqual(hub["spec"]["availabilityConfig"], "Basic")
+        job = next(d for d in docs if d["kind"] == "Job")
+        script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        self.assertIn('PLUGIN="acm"', script)
+        self.assertIn("console.operator.openshift.io cluster", script)
+        subprocess.run(["bash", "-n"], input=script, text=True, check=True)
+
     def test_build_job_can_be_retried_and_waits_for_target(self):
         job = next(d for d in render("agentic-updates-builds") if d["kind"] == "Job")
         self.assertNotIn("argocd.argoproj.io/hook", job["metadata"]["annotations"])
