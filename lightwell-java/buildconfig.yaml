@@ -1,0 +1,40 @@
+# First sync builds the vulnerable release from the pinned upstream commit.
+# Attendees later run `oc start-build --from-dir` against this same BuildConfig.
+# That build updates the ImageStreamTag without changing this Git source.
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: help-im-vulnerable
+  namespace: help-im-vulnerable
+  labels:
+    app.kubernetes.io/part-of: lightwell-java
+    app.kubernetes.io/name: help-im-vulnerable
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  runPolicy: Serial
+  successfulBuildsHistoryLimit: 2
+  failedBuildsHistoryLimit: 2
+  source:
+    type: Git
+    git:
+      uri: https://github.com/lightwell-experience/lightwell-java-demo-app.git
+      ref: decfa713a0a705e4e388d359bd7eb16c51eaa946
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Containerfile
+      forcePull: false
+  output:
+    to:
+      kind: ImageStreamTag
+      name: help-im-vulnerable:vulnerable
+  resources:
+    requests:
+      cpu: "500m"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 6Gi
+  triggers:
+    - type: ConfigChange

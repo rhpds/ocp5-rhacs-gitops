@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: help-im-vulnerable
+  namespace: help-im-vulnerable
+  labels:
+    app: help-im-vulnerable
+    app.kubernetes.io/part-of: lightwell-java
+    app.kubernetes.io/name: help-im-vulnerable
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"help-im-vulnerable:vulnerable","namespace":"help-im-vulnerable"},"fieldPath":"spec.template.spec.containers[0].image","pause":"false"}]'
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 2400
+  selector:
+    matchLabels:
+      app: help-im-vulnerable
+  template:
+    metadata:
+      labels:
+        app: help-im-vulnerable
+        app.kubernetes.io/part-of: lightwell-java
+        app.kubernetes.io/name: help-im-vulnerable
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: image-registry.openshift-image-registry.svc:5000/help-im-vulnerable/help-im-vulnerable:vulnerable
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          startupProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

@@ -118,6 +118,13 @@ lightwellTssc:
   targetRevision: main
   basePath: automation/gitops
 
+# Vulnerable Help I'm Vulnerable release for the Lightwell Java track.
+# Argo CD builds the pinned upstream commit, deploys it, and records the digest.
+# The two-day spring-boot-lw-poc Application stays disabled in lightwell-tssc.
+lightwellJava:
+  enabled: true
+  name: lightwell-java
+
 
 # Custom console build — was needed for EC5 to pick up the virtualized table
 # layout fix (openshift/console#16798). Disabled since EC6 includes the fix.

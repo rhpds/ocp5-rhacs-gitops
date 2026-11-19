@@ -1,0 +1,22 @@
+{{- if .Values.lightwellJava.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" .Values.lightwellJava.name "namespace" .Values.argocd.namespace "syncWave" "3") }}
+spec:
+  destination:
+    namespace: help-im-vulnerable
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    path: lightwell-java
+  # The image trigger writes a digest into the Deployment. Attendee rebuilds
+  # update that digest. Self-heal must not revert it to the tag reference.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jqPathExpressions:
+        - .spec.template.spec.containers[].image
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}
+{{- end }}

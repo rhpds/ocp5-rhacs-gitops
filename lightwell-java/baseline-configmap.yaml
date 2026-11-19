@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: help-im-vulnerable-baseline
+  namespace: help-im-vulnerable
+  labels:
+    app.kubernetes.io/part-of: lightwell-java
+    app.kubernetes.io/name: help-im-vulnerable
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+data:
+  repository: https://github.com/lightwell-experience/lightwell-java-demo-app.git
+  revision: decfa713a0a705e4e388d359bd7eb16c51eaa946
+  critical-cve: CVE-2022-40152
+  woodstox: "6.0.3"
+  woodstox-fix: 6.0.3.rhlw-00001
+  spring: "5.3.18"
+  spring-fix: 5.3.18.rhlw-00010
+  json: "20220320"
+  json-fix: 20220320.0.0.rhlw-00003
+  json-path: "2.8.0"
+  json-path-fix: 2.8.0.rhlw-00001
+  sbom-path: /deployments/maven-sbom.json
+  remediated-repository: https://packages.redhat.com/lightwell/public-lightwell-demo/java/remediated/
+  validated-repository: https://packages.redhat.com/lightwell/public-lightwell-demo/java/validated/

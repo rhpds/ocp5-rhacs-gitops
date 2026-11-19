@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: help-im-vulnerable
+  namespace: help-im-vulnerable
+  labels:
+    app: help-im-vulnerable
+    app.kubernetes.io/part-of: lightwell-java
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  selector:
+    app: help-im-vulnerable
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -1,0 +1,19 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: help-im-vulnerable
+  namespace: help-im-vulnerable
+  labels:
+    app: help-im-vulnerable
+    app.kubernetes.io/part-of: lightwell-java
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  to:
+    kind: Service
+    name: help-im-vulnerable
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
