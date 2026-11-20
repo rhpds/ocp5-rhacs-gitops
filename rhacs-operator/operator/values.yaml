@@ -4,14 +4,15 @@ name: rhacs-operator
 namespace: rhacs-operator
 
 subscription:
-  channel: latest
+  # Use the released OCP 5 catalog; the nightly RC bundle is no longer pullable.
+  channel: rhacs-5.0
   installPlanApproval: Automatic
   name: rhacs-operator
-  source: acs-nightly-catalog
-  sourceNamespace: rhacs-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
 
 catalogSource:
-  enabled: true
+  enabled: false
   name: acs-nightly-catalog
   image: quay.io/rhacs-eng/stackrox-operator-index:v5.0.0-rc.5-fast
   displayName: ACS Nightly Catalog

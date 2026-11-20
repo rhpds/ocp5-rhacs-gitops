@@ -15,8 +15,6 @@ spec:
       valuesObject:
         acs-operator:
           namespace: {{ .Values.acs.namespace }}
-          subscription:
-            sourceNamespace: {{ .Values.acs.namespace }}
         acs-instance:
           clusterName: {{ .Values.acs.clusterName }}
           adminPassword: {{ .Values.acs.adminPassword }}
