@@ -23,5 +23,6 @@ spec:
           source: {{ include "app-of-apps.operatorSource" . }}
         adminUsername: {{ .Values.quay.adminUsername | quote }}
         adminPassword: {{ .Values.common.password | quote }}
+        clusterSubdomain: {{ .Values.cluster.subdomain | quote }}
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}
 {{- end }}

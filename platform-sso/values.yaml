@@ -1,0 +1,9 @@
+# apps domain, for example apps.cluster.example.com. The issuer is
+# https://sso.<clusterSubdomain>/realms/keycloak.
+clusterSubdomain: ""
+
+# Same password as the OpenShift admin and the Showroom homepage.
+# Injected by app-of-apps from common.password. Never commit a real value.
+workshopPassword: ""
+
+argocdNamespace: openshift-gitops

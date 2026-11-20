@@ -8,9 +8,12 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
-def render(chart, release="test"):
+def render(chart, release="test", sets=None):
+    command = ["helm", "template", release, str(ROOT / chart)]
+    for item in sets or []:
+        command.extend(["--set", item])
     return [doc for doc in yaml.safe_load_all(subprocess.check_output(
-        ["helm", "template", release, str(ROOT / chart)], text=True
+        command, text=True
     )) if doc]
 
 
@@ -62,6 +65,36 @@ class ConvergenceTests(unittest.TestCase):
                 continue
             for rule in app["spec"].get("ignoreDifferences", []):
                 self.assertNotEqual(rule.get("group"), "", app["metadata"]["name"])
+
+    def test_platform_sso_uses_bounded_internal_admin_requests(self):
+        job = next(d for d in render("platform-sso") if d["kind"] == "Job")
+        script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        self.assertIn('ADMIN_URL="https://keycloak.keycloak.svc:8443"', script)
+        self.assertIn('SSO_URL="https://sso.', script)
+        self.assertNotIn("${SSO_URL}/", script)
+        self.assertIn('--data-urlencode "password=${ADMIN_PASS}"', script)
+        self.assertEqual(job["spec"]["activeDeadlineSeconds"], 600)
+        for line in script.splitlines():
+            if "curl " in line:
+                self.assertIn("--connect-timeout 5 --max-time 30", line)
+                self.assertIn("-fsSk", line)
+        subprocess.run(["bash", "-n"], input=script, text=True, check=True)
+        rendered = render("lightwell-tssc", sets=["deployer.domain=apps.example.com"])
+        rhtpa = next(doc for doc in rendered if doc["metadata"]["name"].endswith("-rhtpa"))
+        issuer = rhtpa["spec"]["source"]["helm"]["valuesObject"]["oidc"]["issuerURL"]
+        self.assertEqual(issuer, "https://sso.apps.example.com/realms/keycloak")
+        for doc in rendered:
+            if doc["kind"] != "Application":
+                continue
+            for rule in doc["spec"].get("ignoreDifferences", []):
+                self.assertNotEqual(rule.get("group"), "", doc["metadata"]["name"])
+        quay = next(doc for doc in render(
+            "quay", sets=["clusterSubdomain=apps.example.com", "adminPassword=workshop"]
+        ) if doc["kind"] == "Secret" and doc["metadata"]["name"] == "quay-config-bundle-v3")
+        config = quay["stringData"]["config.yaml"]
+        self.assertIn("AUTHENTICATION_TYPE: OIDC", config)
+        self.assertIn("FEATURE_DIRECT_LOGIN: true", config)
+        self.assertIn("https://sso.apps.example.com/realms/keycloak", config)
 
     def test_keycloak_bootstrap_uses_bounded_internal_admin_requests(self):
         job = next(d for d in render("openshift-mcp-server") if d["kind"] == "Job")

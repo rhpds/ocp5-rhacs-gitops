@@ -1,0 +1,5 @@
+apiVersion: v2
+name: platform-sso
+description: Lab users and OIDC clients on the platform Keycloak realm
+type: application
+version: 0.1.0

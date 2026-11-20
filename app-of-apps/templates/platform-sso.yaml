@@ -1,0 +1,20 @@
+{{- if .Values.platformSso.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" .Values.platformSso.name "namespace" .Values.argocd.namespace "syncWave" "-1") }}
+spec:
+  destination:
+    namespace: {{ .Values.argocd.namespace }}
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: platform-sso
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    helm:
+      valuesObject:
+        clusterSubdomain: {{ .Values.cluster.subdomain | quote }}
+        workshopPassword: {{ .Values.common.password | quote }}
+        argocdNamespace: {{ .Values.argocd.namespace | quote }}
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}
+{{- end }}

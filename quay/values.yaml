@@ -12,6 +12,11 @@ adminUsername: admin
 adminPassword: ""
 adminEmail: admin@example.com
 
+# When set with adminPassword, the registry UI accepts the platform Keycloak
+# realm. The client secret is the same workshop password. Database login stays
+# on for podman and robot accounts.
+clusterSubdomain: ""
+
 # Operator-managed Route host is {name}-quay-{namespace}.{appsDomain}
 # → registry-quay-quay.<cluster subdomain>. Do not set a custom hostname;
 # that requires unmanaged TLS and blocked registry-quay-app-upgrade.

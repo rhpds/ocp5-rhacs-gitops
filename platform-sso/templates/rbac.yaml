@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-sso
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+---
+# Reads the named workshop secrets and patches the two ConfigMaps the
+# products already own. Pod delete is limited to restarting Developer Hub
+# after its sign-in config changes. Argo CD itself is not stored in this repo.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-sso
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      - keycloak-initial-admin
+      - central-htpasswd
+      - central-admin-password
+      - gitea-admin
+      - tpa-realm-cli-clients
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames:
+      - app-config-rhdh
+      - demo-userinfo-keycloak
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+  # Gitea 1.22 in this workshop does not serve /api/v1/admin/auths.
+  # The CLI inside the Gitea pod is the supported way to register OIDC.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["argocds"]
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-sso
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-sso
+subjects:
+  - kind: ServiceAccount
+    name: platform-sso
+    namespace: {{ .Release.Namespace }}

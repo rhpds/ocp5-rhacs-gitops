@@ -1,0 +1,428 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: platform-sso
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  backoffLimit: 8
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      serviceAccountName: platform-sso
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: configure
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: WORKSHOP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-sso-workshop
+                  key: password
+            - name: CLUSTER_SUBDOMAIN
+              value: {{ .Values.clusterSubdomain | quote }}
+            - name: ARGOCD_NAMESPACE
+              value: {{ .Values.argocdNamespace | quote }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              ADMIN_URL="https://keycloak.keycloak.svc:8443"
+              SSO_URL="https://sso.{{ .Values.clusterSubdomain }}"
+              REALM="keycloak"
+              if [ -z "${CLUSTER_SUBDOMAIN}" ] || [ -z "${WORKSHOP_PASSWORD}" ]; then
+                echo "clusterSubdomain and workshop password are required"
+                exit 1
+              fi
+              ADMIN_USER=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.username}' | base64 -d)
+              ADMIN_PASS=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.password}' | base64 -d)
+              ADMIN_TOKEN=$(curl -fsSk --connect-timeout 5 --max-time 30 \
+                "${ADMIN_URL}/realms/master/protocol/openid-connect/token" \
+                --data-urlencode "grant_type=password" \
+                --data-urlencode "client_id=admin-cli" \
+                --data-urlencode "username=${ADMIN_USER}" \
+                --data-urlencode "password=${ADMIN_PASS}" \
+                | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+              export ADMIN_URL SSO_URL REALM ADMIN_TOKEN
+              python3 - << 'PY'
+              import base64, json, os, shlex, ssl, subprocess, urllib.error, urllib.parse, urllib.request
+
+              admin_url = os.environ["ADMIN_URL"]
+              sso_url = os.environ["SSO_URL"]
+              realm = os.environ["REALM"]
+              token = os.environ["ADMIN_TOKEN"]
+              password = os.environ["WORKSHOP_PASSWORD"]
+              subdomain = os.environ["CLUSTER_SUBDOMAIN"]
+              argocd_ns = os.environ["ARGOCD_NAMESPACE"]
+              issuer = sso_url + "/realms/" + realm
+              ctx = ssl._create_unverified_context()
+
+              def kc(method, path, payload=None):
+                  data = None if payload is None else json.dumps(payload).encode()
+                  req = urllib.request.Request(
+                      admin_url + path,
+                      data=data,
+                      method=method,
+                      headers={
+                          "Authorization": "Bearer " + token,
+                          "Content-Type": "application/json",
+                          "Accept": "application/json",
+                      },
+                  )
+                  try:
+                      with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
+                          raw = resp.read()
+                          if not raw:
+                              return None
+                          return json.loads(raw)
+                  except urllib.error.HTTPError as exc:
+                      body = exc.read().decode("utf-8", "replace")
+                      raise SystemExit("Keycloak %s %s HTTP %s: %s" % (method, path, exc.code, body[:400]))
+
+              def oc_json(args):
+                  return json.loads(subprocess.check_output(["oc", *args], text=True))
+
+              def secret_data(namespace, name):
+                  doc = oc_json(["get", "secret", name, "-n", namespace, "-o", "json"])
+                  return {key: base64.b64decode(value).decode() for key, value in (doc.get("data") or {}).items()}
+
+              def pick(data, *keys):
+                  for key in keys:
+                      if data.get(key):
+                          return data[key]
+                  raise SystemExit("secret is missing any of %s" % (keys,))
+
+              def ensure_user(username, email, first):
+                  found = kc("GET", "/admin/realms/%s/users?%s" % (
+                      realm, urllib.parse.urlencode({"username": username, "exact": "true"})))
+                  if not found:
+                      kc("POST", "/admin/realms/%s/users" % realm, {
+                          "username": username,
+                          "enabled": True,
+                          "email": email,
+                          "emailVerified": True,
+                          "firstName": first,
+                          "lastName": "Workshop",
+                      })
+                      found = kc("GET", "/admin/realms/%s/users?%s" % (
+                          realm, urllib.parse.urlencode({"username": username, "exact": "true"})))
+                  user = found[0]
+                  kc("PUT", "/admin/realms/%s/users/%s" % (realm, user["id"]), {
+                      "id": user["id"],
+                      "username": username,
+                      "enabled": True,
+                      "email": email,
+                      "emailVerified": True,
+                      "firstName": first,
+                      "lastName": "Workshop",
+                  })
+                  kc("PUT", "/admin/realms/%s/users/%s/reset-password" % (realm, user["id"]), {
+                      "type": "password",
+                      "value": password,
+                      "temporary": False,
+                  })
+                  print("user", username)
+                  return user
+
+              def ensure_realm_role(name):
+                  roles = kc("GET", "/admin/realms/%s/roles" % realm)
+                  found = next((role for role in roles if role["name"] == name), None)
+                  if not found:
+                      kc("POST", "/admin/realms/%s/roles" % realm, {"name": name})
+                      roles = kc("GET", "/admin/realms/%s/roles" % realm)
+                      found = next(role for role in roles if role["name"] == name)
+                  return {"id": found["id"], "name": found["name"]}
+
+              def assign_realm_roles(user_id, roles):
+                  current = kc("GET", "/admin/realms/%s/users/%s/role-mappings/realm" % (realm, user_id)) or []
+                  have = {role["name"] for role in current}
+                  missing = [role for role in roles if role["name"] not in have]
+                  if missing:
+                      kc("POST", "/admin/realms/%s/users/%s/role-mappings/realm" % (realm, user_id), missing)
+
+              def ensure_scope(name):
+                  scopes = kc("GET", "/admin/realms/%s/client-scopes" % realm)
+                  found = next((scope for scope in scopes if scope["name"] == name), None)
+                  if not found:
+                      kc("POST", "/admin/realms/%s/client-scopes" % realm, {
+                          "name": name,
+                          "protocol": "openid-connect",
+                          "attributes": {
+                              "include.in.token.scope": "true",
+                              "display.on.consent.screen": "false",
+                          },
+                      })
+                      scopes = kc("GET", "/admin/realms/%s/client-scopes" % realm)
+                      found = next(scope for scope in scopes if scope["name"] == name)
+                  return found
+
+              def add_default_scope(client_id, scope):
+                  kc("PUT", "/admin/realms/%s/clients/%s/default-client-scopes/%s" % (realm, client_id, scope["id"]))
+
+              def ensure_client(client_id, public, secret, redirects):
+                  found = kc("GET", "/admin/realms/%s/clients?clientId=%s" % (realm, urllib.parse.quote(client_id)))
+                  body = {
+                      "clientId": client_id,
+                      "enabled": True,
+                      "publicClient": public,
+                      "protocol": "openid-connect",
+                      "standardFlowEnabled": True,
+                      "directAccessGrantsEnabled": public,
+                      "serviceAccountsEnabled": not public and client_id == "cli",
+                      "fullScopeAllowed": True,
+                      "redirectUris": redirects,
+                      "webOrigins": ["+"],
+                  }
+                  if not public:
+                      body["secret"] = secret
+                  if client_id == "frontend":
+                      body["attributes"] = {"pkce.code.challenge.method": "S256"}
+                  if not found:
+                      kc("POST", "/admin/realms/%s/clients" % realm, body)
+                      found = kc("GET", "/admin/realms/%s/clients?clientId=%s" % (realm, urllib.parse.quote(client_id)))
+                  client = found[0]
+                  client["redirectUris"] = sorted(set(client.get("redirectUris") or []) | set(redirects))
+                  client["webOrigins"] = sorted(set(client.get("webOrigins") or []) | {"+"})
+                  client["standardFlowEnabled"] = True
+                  if not public:
+                      client["secret"] = secret
+                  if client_id == "frontend":
+                      client["directAccessGrantsEnabled"] = True
+                      attrs = client.get("attributes") or {}
+                      attrs["pkce.code.challenge.method"] = "S256"
+                      client["attributes"] = attrs
+                  if client_id == "cli":
+                      client["serviceAccountsEnabled"] = True
+                      client["directAccessGrantsEnabled"] = True
+                  kc("PUT", "/admin/realms/%s/clients/%s" % (realm, client["id"]), client)
+                  print("client", client_id)
+                  return client
+
+              def ensure_groups_mapper(client_id):
+                  mappers = kc("GET", "/admin/realms/%s/clients/%s/protocol-mappers/models" % (realm, client_id)) or []
+                  if any(mapper.get("name") == "groups" for mapper in mappers):
+                      return
+                  kc("POST", "/admin/realms/%s/clients/%s/protocol-mappers/models" % (realm, client_id), {
+                      "name": "groups",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-group-membership-mapper",
+                      "consentRequired": False,
+                      "config": {
+                          "full.path": "false",
+                          "id.token.claim": "true",
+                          "access.token.claim": "true",
+                          "userinfo.token.claim": "true",
+                          "claim.name": "groups",
+                          "jsonType.label": "String",
+                      },
+                  })
+
+              print("issuer", issuer)
+              student_email = "student@workshop.local"
+              tpa = ensure_user("tpa-user", "tpa-user@workshop.local", "TPA")
+              student = ensure_user("student", student_email, "Student")
+              chicken = [ensure_realm_role(name) for name in ("chicken-user", "chicken-manager", "chicken-admin")]
+              assign_realm_roles(tpa["id"], chicken)
+              doc_scopes = [ensure_scope(name) for name in ("read:document", "create:document", "delete:document")]
+
+              host = lambda name: "https://" + name + "." + subdomain
+              cli_secret = pick(secret_data("trusted-profile-analyzer", "tpa-realm-cli-clients"), "cli")
+              clients = {
+                  "rhacs": ensure_client("rhacs", False, password, [host("central-reencrypt-stackrox") + "/*"]),
+                  "quay": ensure_client("quay", False, password, [host("registry-quay-quay") + "/oauth2/callback", host("registry-quay-quay") + "/*"]),
+                  "rhdh": ensure_client("rhdh", False, password, [host("backstage-developer-hub-rhdh") + "/api/auth/oidc/handler/frame", host("backstage-developer-hub-rhdh") + "/*"]),
+                  "gitea": ensure_client("gitea", False, password, [host("gitea") + "/user/oauth2/keycloak/callback", host("gitea") + "/*"]),
+                  "frontend": ensure_client("frontend", True, None, [host("server-trusted-profile-analyzer") + "/*"]),
+                  "cli": ensure_client("cli", False, cli_secret, [host("server-trusted-profile-analyzer") + "/*"]),
+              }
+              for name in ("frontend", "cli"):
+                  for scope in doc_scopes:
+                      add_default_scope(clients[name]["id"], scope)
+              ensure_groups_mapper(clients["rhacs"]["id"])
+              account = kc("GET", "/admin/realms/%s/clients/%s/service-account-user" % (realm, clients["cli"]["id"]))
+              manager = next(role for role in chicken if role["name"] == "chicken-manager")
+              assign_realm_roles(account["id"], [manager])
+
+              policy_line = "g, admins, role:admin"
+              argocd = oc_json(["get", "argocd", "openshift-gitops", "-n", argocd_ns, "-o", "json"])
+              policy = ((argocd.get("spec") or {}).get("rbac") or {}).get("policy") or ""
+              if policy_line not in policy.splitlines():
+                  updated = (policy.rstrip() + "\n" + policy_line + "\n").lstrip("\n")
+                  if (argocd.get("spec") or {}).get("rbac") is None:
+                      patch = [{"op": "add", "path": "/spec/rbac", "value": {"policy": updated}}]
+                  elif not policy:
+                      patch = [{"op": "add", "path": "/spec/rbac/policy", "value": updated}]
+                  else:
+                      patch = [{"op": "replace", "path": "/spec/rbac/policy", "value": updated}]
+                  subprocess.check_call([
+                      "oc", "patch", "argocd", "openshift-gitops", "-n", argocd_ns,
+                      "--type", "json", "-p", json.dumps(patch),
+                  ])
+              print("argocd policy includes", policy_line)
+
+              basic = "Basic " + base64.b64encode(("admin:" + pick(secret_data("rhacs-operator", "central-admin-password"), "password")).encode()).decode()
+              ui = host("central-reencrypt-stackrox")
+              central = "https://central.rhacs-operator.svc:443"
+
+              def central_req(method, path, payload=None):
+                  data = None if payload is None else json.dumps(payload).encode()
+                  req = urllib.request.Request(
+                      central + path,
+                      data=data,
+                      method=method,
+                      headers={"Authorization": basic, "Content-Type": "application/json", "Accept": "application/json"},
+                  )
+                  try:
+                      with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
+                          raw = resp.read()
+                          return json.loads(raw) if raw else None
+                  except urllib.error.HTTPError as exc:
+                      body = exc.read().decode("utf-8", "replace")
+                      raise SystemExit("ACS %s %s HTTP %s: %s" % (method, path, exc.code, body[:400]))
+
+              provider = {
+                  "name": "Keycloak",
+                  "type": "oidc",
+                  "uiEndpoint": ui,
+                  "enabled": True,
+                  "config": {
+                      "issuer": issuer,
+                      "client_id": "rhacs",
+                      "client_secret": password,
+                      "mode": "post",
+                  },
+                  "groups": [{"key": "groups", "value": "admins", "roleName": "Admin"}],
+              }
+              existing = (central_req("GET", "/v1/authProviders") or {}).get("authProviders") or []
+              current = next((item for item in existing if item.get("name") == "Keycloak"), None)
+              if current:
+                  provider["id"] = current["id"]
+                  central_req("PUT", "/v1/authProviders/" + current["id"], provider)
+              else:
+                  central_req("POST", "/v1/authProviders", provider)
+              print("acs auth provider Keycloak")
+
+              gitea_secret = secret_data("gitea", "gitea-admin")
+              gitea_basic = base64.b64encode((
+                  pick(gitea_secret, "username", "user") + ":" + pick(gitea_secret, "password")
+              ).encode()).decode()
+              gitea_root = "http://gitea.gitea.svc.cluster.local:3000"
+
+              def gitea_req(method, path):
+                  req = urllib.request.Request(
+                      gitea_root + path,
+                      method=method,
+                      headers={"Authorization": "Basic " + gitea_basic, "Accept": "application/json"},
+                  )
+                  try:
+                      with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                          raw = resp.read()
+                          return json.loads(raw) if raw else None
+                  except (urllib.error.HTTPError, urllib.error.URLError):
+                      return None
+
+              try:
+                  gitea_user = gitea_req("GET", "/api/v1/users/student") or {}
+                  if gitea_user.get("email"):
+                      ensure_user("student", gitea_user["email"], "Student")
+              except Exception:
+                  print("gitea student lookup skipped")
+              discovery = issuer + "/.well-known/openid-configuration"
+              gitea_pod = subprocess.check_output([
+                  "oc", "get", "pods", "-n", "gitea", "-l", "app=gitea",
+                  "-o", "jsonpath={.items[0].metadata.name}",
+              ], text=True).strip()
+              if not gitea_pod:
+                  raise SystemExit("gitea pod not found")
+
+              def gitea_cli(shell):
+                  proc = subprocess.run(
+                      ["oc", "exec", "-n", "gitea", gitea_pod, "--", "su", "git", "-c", shell],
+                      text=True, capture_output=True,
+                  )
+                  if proc.returncode != 0:
+                      print(proc.stderr[-400:])
+                      raise SystemExit("gitea cli failed")
+                  return proc.stdout
+
+              listed = gitea_cli("gitea admin auth list")
+              existing_id = ""
+              for line in listed.splitlines()[1:]:
+                  cols = line.split("\t")
+                  if len(cols) >= 2 and cols[1].strip() == "keycloak":
+                      existing_id = cols[0].strip()
+              flags = "--name keycloak --provider openidConnect --key gitea --secret %s --auto-discover-url %s --scopes openid --scopes profile --scopes email" % (
+                  shlex.quote(password), shlex.quote(discovery))
+              if existing_id:
+                  gitea_cli("gitea admin auth update-oauth --id %s %s" % (shlex.quote(existing_id), flags))
+              else:
+                  gitea_cli("gitea admin auth add-oauth " + flags)
+              print("gitea oauth keycloak")
+
+              cm = oc_json(["get", "configmap", "app-config-rhdh", "-n", "rhdh", "-o", "json"])
+              text = cm["data"]["app-config-rhdh.yaml"]
+              callback = host("backstage-developer-hub-rhdh") + "/api/auth/oidc/handler/frame"
+              oidc_block = (
+                  "    oidc:\n"
+                  "      development:\n"
+                  "        metadataUrl: %s\n"
+                  "        clientId: rhdh\n"
+                  "        clientSecret: %s\n"
+                  "        prompt: auto\n"
+                  "        callbackUrl: %s\n"
+              ) % (issuer + "/.well-known/openid-configuration", json.dumps(password), callback)
+              if "clientId: rhdh" not in text:
+                  marker = "      dangerouslyAllowOutsideDevelopment: true\n"
+                  if marker not in text:
+                      raise SystemExit("app-config-rhdh has no guest provider block to extend")
+                  text = text.replace(marker, marker + oidc_block, 1)
+              else:
+                  lines = []
+                  for line in text.splitlines(keepends=True):
+                      if line.strip().startswith("clientSecret:"):
+                          lines.append("        clientSecret: %s\n" % json.dumps(password))
+                      elif line.strip().startswith("metadataUrl:"):
+                          lines.append("        metadataUrl: %s\n" % (issuer + "/.well-known/openid-configuration"))
+                      elif line.strip().startswith("callbackUrl:"):
+                          lines.append("        callbackUrl: %s\n" % callback)
+                      else:
+                          lines.append(line)
+                  text = "".join(lines)
+              text = text.replace("signInPage: guest", "signInPage: oidc", 1)
+              patch = {"data": {"app-config-rhdh.yaml": text}}
+              subprocess.check_call([
+                  "oc", "patch", "configmap", "app-config-rhdh", "-n", "rhdh",
+                  "--type", "merge", "-p", json.dumps(patch),
+              ])
+              pods = subprocess.check_output(["oc", "get", "pods", "-n", "rhdh", "-o", "name"], text=True)
+              for pod in pods.splitlines():
+                  if pod.startswith("pod/backstage-developer-hub-"):
+                      subprocess.check_call(["oc", "delete", "-n", "rhdh", pod, "--wait=false"])
+              print("developer hub oidc")
+
+              subprocess.check_call([
+                  "oc", "patch", "configmap", "demo-userinfo-keycloak", "-n", "sso",
+                  "--type", "merge", "-p", json.dumps({"data": {
+                      "oidc_issuer": issuer,
+                      "oidc_realm": realm,
+                      "keycloak_url": sso_url,
+                  }}),
+              ])
+              print("userinfo issuer", issuer)
+              print("platform-sso configured")
+              PY

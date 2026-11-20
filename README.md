@@ -14,6 +14,7 @@ Helm charts for the hosted environment, deployed via Argo CD's app-of-apps patte
 - `roadshow-prereqs/` — Cluster-wide roadshow extras (Compliance Operator, collector ConfigMap, ACME RBAC, audit retention, privileged SCC for ACS demo-apps, master auto node-sizing, kubelet image GC)
 - Argo Application `roadshow-demo-apps` — recursive apply of `mfosterrox/demo-apps` `kubernetes-manifests/`
 - `lightwell-tssc/` — Nested Argo Applications for the [Lightwell TSSC workshop](https://github.com/mfosterrox/lightwell-tssc-workshop) (RHTAS, RHTPA, Gitea, Nexus, Pipelines, RHDH). Does not reinstall RHACS or Showroom.
+- `platform-sso/` — Lab users and OIDC clients on the platform Keycloak realm (`keycloak`), plus sign-in wiring for RHACS, Argo CD, Developer Hub, Gitea, and RHTPA.
 
 ## Usage
 

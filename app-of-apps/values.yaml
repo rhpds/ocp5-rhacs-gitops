@@ -85,6 +85,11 @@ quay:
   adminUsername: admin
   # Operator-managed host prefix: registry-quay-quay.<cluster subdomain>
 
+# Users and OIDC clients on the platform Keycloak (realm keycloak).
+platformSso:
+  enabled: true
+  name: platform-sso
+
 # Mock inventory/payments/accounts servers for the MCP gateway.
 mockMcpServers:
   enabled: false

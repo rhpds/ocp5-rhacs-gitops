@@ -47,6 +47,15 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: {{ .Values.components.keycloak.namespace }}
+  # platform-sso points labs at the platform realm. The chart still renders
+  # the sso-tpa issuer into this ConfigMap; keep the patched keys.
+  ignoreDifferences:
+    - kind: ConfigMap
+      name: demo-userinfo-keycloak
+      jsonPointers:
+        - /data/oidc_issuer
+        - /data/oidc_realm
+        - /data/keycloak_url
   syncPolicy:
     automated:
       prune: true
@@ -54,6 +63,7 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
 {{- end }}
 
 {{- if .Values.components.pipelines.enabled }}
@@ -174,10 +184,10 @@ spec:
               requests:
                 cpu: {{ .Values.resources.rhtpa.cpu | quote }}
                 memory: {{ .Values.resources.rhtpa.memory | quote }}
-{{- if and .Values.deployer.domain .Values.components.keycloak.enabled }}
+{{- if .Values.deployer.domain }}
         oidc:
-          realm: {{ .Values.components.keycloak.realm | default "tpa" | quote }}
-          issuerURL: {{ printf "https://%s.%s/realms/%s" (.Values.components.keycloak.routeHostPrefix | default "sso-tpa") .Values.deployer.domain (.Values.components.keycloak.realm | default "tpa") | quote }}
+          realm: keycloak
+          issuerURL: {{ printf "https://sso.%s/realms/keycloak" .Values.deployer.domain | quote }}
 {{- end }}
         deployer:
           domain: {{ .Values.deployer.domain | quote }}
@@ -615,6 +625,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: {{ .Values.components.rhdh.namespace }}
+  # platform-sso adds the OIDC provider to this file. The chart renders Guest only.
+  ignoreDifferences:
+    - kind: ConfigMap
+      name: app-config-rhdh
+      jsonPointers:
+        - /data/app-config-rhdh.yaml
   syncPolicy:
     automated:
       prune: true
@@ -623,6 +639,7 @@ spec:
       - CreateNamespace=true
       - SkipDryRunOnMissingResource=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
 {{- end }}
 
 {{- if .Values.components.springBootLwPoc.enabled }}
