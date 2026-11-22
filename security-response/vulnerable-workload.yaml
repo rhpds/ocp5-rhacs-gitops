@@ -1,0 +1,221 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  name: vulnerable-workload-1
+  labels:
+    workshop: fsi-security
+    exercise: "4"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  name: message-broker
+  namespace: vulnerable-workload-1
+  labels:
+    app: message-broker
+    variant: community-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: message-broker
+  template:
+    metadata:
+      labels:
+        app: message-broker
+        variant: community-redis
+    spec:
+      containers:
+        - name: redis
+          image: docker.io/redis:7-alpine
+          args: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 250m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  name: message-broker
+  namespace: vulnerable-workload-1
+spec:
+  selector:
+    app: message-broker
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  name: edge-server
+  namespace: vulnerable-workload-1
+  labels:
+    app: edge-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edge-server
+  template:
+    metadata:
+      labels:
+        app: edge-server
+    spec:
+      containers:
+        - name: edge-server
+          image: quay.io/smileyfritz/edge-server:0.1.0
+          ports:
+            - containerPort: 6000
+          env:
+            - name: BROKER_HOST
+              value: message-broker
+            - name: BROKER_PORT
+              value: "6379"
+            - name: BROKER_CHANNEL
+              value: socketio
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 6000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 150m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  name: edge-server
+  namespace: vulnerable-workload-1
+spec:
+  selector:
+    app: edge-server
+  ports:
+    - port: 6000
+      targetPort: 6000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  name: socketio-server
+  namespace: vulnerable-workload-1
+  labels:
+    app: socketio-server
+    variant: vulnerable
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: socketio-server
+  template:
+    metadata:
+      labels:
+        app: socketio-server
+        variant: vulnerable
+    spec:
+      containers:
+        - name: socketio-server
+          image: quay.io/smileyfritz/socketio-server:0.1.0-vulnerable
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: BROKER_HOST
+              value: message-broker
+            - name: BROKER_PORT
+              value: "6379"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 250m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  name: socketio-server
+  namespace: vulnerable-workload-1
+spec:
+  selector:
+    app: socketio-server
+  ports:
+    - port: 5000
+      targetPort: 5000
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  name: edge-server
+  namespace: vulnerable-workload-1
+  labels:
+    app: edge-server
+spec:
+  to:
+    kind: Service
+    name: edge-server
+  port:
+    targetPort: 6000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  name: socketio-server
+  namespace: vulnerable-workload-1
+  labels:
+    app: socketio-server
+spec:
+  to:
+    kind: Service
+    name: socketio-server
+  port:
+    targetPort: 5000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

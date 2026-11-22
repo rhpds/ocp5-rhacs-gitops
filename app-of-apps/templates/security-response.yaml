@@ -1,0 +1,45 @@
+{{- if .Values.securityResponse.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" .Values.securityResponse.name "namespace" .Values.argocd.namespace "syncWave" "3") }}
+spec:
+  destination:
+    namespace: payment-gateway-1
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    path: security-response
+  # Exercise 4 replaces these pod templates. Ignore that drift so selfHeal
+  # does not roll the hardened image back.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: socketio-server
+      namespace: vulnerable-workload-1
+      jqPathExpressions:
+        - .spec.template
+        - .metadata.labels
+    - group: apps
+      kind: Deployment
+      name: message-broker
+      namespace: vulnerable-workload-1
+      jqPathExpressions:
+        - .spec.template
+        - .metadata.labels
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m0s
+      limit: 5
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+      - SkipDryRunOnMissingResource=true
+{{- end }}

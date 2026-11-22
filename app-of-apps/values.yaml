@@ -130,6 +130,12 @@ lightwellJava:
   enabled: true
   name: lightwell-java
 
+# ACME incident namespaces for the OpenShift Security Response track.
+# Suffix 1 matches the Showroom attribute workshop_user_suffix.
+securityResponse:
+  enabled: true
+  name: security-response
+
 
 # Custom console build — was needed for EC5 to pick up the virtualized table
 # layout fix (openshift/console#16798). Disabled since EC6 includes the fix.
