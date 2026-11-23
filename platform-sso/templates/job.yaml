@@ -244,7 +244,12 @@ spec:
               cli_secret = pick(secret_data("trusted-profile-analyzer", "tpa-realm-cli-clients"), "cli")
               clients = {
                   "rhacs": ensure_client("rhacs", False, password, [host("central-reencrypt-stackrox") + "/*"]),
-                  "quay": ensure_client("quay", False, password, [host("registry-quay-quay") + "/oauth2/callback", host("registry-quay-quay") + "/*"]),
+                  "quay": ensure_client("quay", False, password, [
+                      host("registry-quay-quay") + "/oauth2/keycloak/callback",
+                      host("registry-quay-quay") + "/oauth2/keycloak/callback/attach",
+                      host("registry-quay-quay") + "/oauth2/keycloak/callback/cli",
+                      host("registry-quay-quay") + "/*",
+                  ]),
                   "rhdh": ensure_client("rhdh", False, password, [host("backstage-developer-hub-rhdh") + "/api/auth/oidc/handler/frame", host("backstage-developer-hub-rhdh") + "/*"]),
                   "gitea": ensure_client("gitea", False, password, [host("gitea") + "/user/oauth2/keycloak/callback", host("gitea") + "/*"]),
                   "frontend": ensure_client("frontend", True, None, [host("server-trusted-profile-analyzer") + "/*"]),
