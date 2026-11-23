@@ -6,7 +6,10 @@ metadata:
   namespace: openshift-cluster-version
   annotations:
     argocd.argoproj.io/sync-wave: "3"
+    # A failed Job spec is immutable. Replace lets the next sync recreate it.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
+  backoffLimit: 2
   template:
     metadata:
       labels:
@@ -28,5 +31,23 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
-              echo "Patching ClusterVersion to set upstream and channel..." &&
-              oc patch clusterversion version --type json -p '[{"op": "add", "path": "/spec/upstream", "value": "https://fauxinnati-fauxinnati.apps.ota-stage.q2z4.p1.openshiftapps.com/api/upgrades_info/graph"}, {"op": "add", "path": "/spec/channel", "value": "simple"}]'
+              set -euo pipefail
+              UPSTREAM="https://fauxinnati-fauxinnati.apps.ota-stage.q2z4.p1.openshiftapps.com/api/upgrades_info/graph"
+              echo "Patching ClusterVersion to set upstream and channel..."
+              for attempt in 1 2 3 4 5; do
+                if oc --request-timeout=15s patch clusterversion version --type json \
+                  -p "[{\"op\":\"add\",\"path\":\"/spec/upstream\",\"value\":\"${UPSTREAM}\"},{\"op\":\"add\",\"path\":\"/spec/channel\",\"value\":\"simple\"}]"; then
+                  echo "ClusterVersion upstream and channel set."
+                  exit 0
+                fi
+                current_upstream="$(oc --request-timeout=15s get clusterversion version -o jsonpath='{.spec.upstream}' || true)"
+                current_channel="$(oc --request-timeout=15s get clusterversion version -o jsonpath='{.spec.channel}' || true)"
+                if [[ "${current_upstream}" == "${UPSTREAM}" && "${current_channel}" == "simple" ]]; then
+                  echo "ClusterVersion already has the fauxinnati upstream and simple channel."
+                  exit 0
+                fi
+                echo "Attempt ${attempt} failed; retrying..."
+                sleep 5
+              done
+              echo "Failed to set ClusterVersion upstream and channel" >&2
+              exit 1

@@ -8,7 +8,15 @@ metadata:
 spec:
   egress:
   - ports:
+    # In-cluster oc uses the Kubernetes Service on 443. 6443 is the
+    # external API port. DNS is required when the client resolves a name.
+    - port: 443
+      protocol: TCP
     - port: 6443
+      protocol: TCP
+    - port: 53
+      protocol: UDP
+    - port: 53
       protocol: TCP
   podSelector:
     matchLabels:

@@ -1,6 +1,7 @@
-# First sync builds the vulnerable release from the pinned upstream commit.
-# Attendees later run `oc start-build --from-dir` against this same BuildConfig.
-# That build updates the ImageStreamTag without changing this Git source.
+# The wave-4 Job builds the vulnerable release from the pinned upstream commit.
+# There is no ConfigChange trigger, so apply does not start a build before that
+# Job is ready. Attendees later run `oc start-build --from-dir` against this
+# same BuildConfig. That build updates the ImageStreamTag without changing Git.
 apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
@@ -36,5 +37,3 @@ spec:
     limits:
       cpu: "2"
       memory: 6Gi
-  triggers:
-    - type: ConfigChange

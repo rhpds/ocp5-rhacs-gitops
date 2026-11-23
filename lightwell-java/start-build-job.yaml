@@ -1,0 +1,140 @@
+# Starts the first vulnerable build and waits for it to finish.
+# The Deployment is a later sync wave, so it is not applied until this Job
+# is healthy and the ImageStreamTag exists.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: help-im-vulnerable-build
+  namespace: help-im-vulnerable
+  labels:
+    app.kubernetes.io/part-of: lightwell-java
+    app.kubernetes.io/name: help-im-vulnerable
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    # A failed Job spec is immutable. Replace lets the next sync recreate it.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 3000
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: lightwell-java
+        app.kubernetes.io/name: help-im-vulnerable
+    spec:
+      serviceAccountName: help-im-vulnerable-release
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: build
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              NS=help-im-vulnerable
+              BC=help-im-vulnerable
+              # Leave a margin inside the 3000s Job deadline.
+              deadline=$((SECONDS + 2700))
+
+              echo "Waiting for the builder ServiceAccount..."
+              for attempt in $(seq 1 60); do
+                if oc --request-timeout=15s -n "$NS" get serviceaccount builder >/dev/null 2>&1; then
+                  break
+                fi
+                if [[ "$attempt" -eq 60 ]]; then
+                  echo "builder ServiceAccount was not created" >&2
+                  exit 1
+                fi
+                sleep 5
+              done
+
+              latest_build() {
+                oc --request-timeout=15s -n "$NS" get builds -l "buildconfig=${BC}" \
+                  --sort-by=.metadata.creationTimestamp \
+                  -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null || true
+              }
+
+              phase_of() {
+                oc --request-timeout=15s -n "$NS" get build "$1" \
+                  -o jsonpath='{.status.phase}' 2>/dev/null || true
+              }
+
+              wait_build() {
+                local name="$1"
+                local phase
+                while (( SECONDS < deadline )); do
+                  phase="$(phase_of "$name")"
+                  case "$phase" in
+                    Complete)
+                      echo "Build ${name} completed"
+                      return 0
+                      ;;
+                    Failed|Error)
+                      echo "Build ${name} ${phase}"
+                      return 1
+                      ;;
+                    *)
+                      echo "Build ${name} is ${phase:-Pending}"
+                      sleep 10
+                      ;;
+                  esac
+                done
+                echo "Timed out waiting for build ${name}" >&2
+                return 1
+              }
+
+              starts=0
+              while (( SECONDS < deadline )); do
+                latest="$(latest_build)"
+                if [[ -n "${latest}" ]]; then
+                  phase="$(phase_of "$latest")"
+                  case "$phase" in
+                    Complete)
+                      echo "Build ${latest} completed"
+                      exit 0
+                      ;;
+                    Failed|Error)
+                      echo "Build ${latest} is ${phase}; starting another build"
+                      ;;
+                    *)
+                      echo "Waiting for in-progress build ${latest}"
+                      if wait_build "$latest"; then
+                        exit 0
+                      fi
+                      phase="$(phase_of "$latest")"
+                      if [[ "$phase" != "Failed" && "$phase" != "Error" ]]; then
+                        echo "Build ${latest} is ${phase:-unknown}; not starting another" >&2
+                        exit 1
+                      fi
+                      ;;
+                  esac
+                fi
+                starts=$((starts + 1))
+                if (( starts > 3 )); then
+                  echo "Build failed after 3 starts" >&2
+                  exit 1
+                fi
+                echo "Starting build attempt ${starts}"
+                created="$(oc --request-timeout=15s -n "$NS" start-build "$BC" -o name)"
+                created="${created##*/}"
+                if wait_build "$created"; then
+                  exit 0
+                fi
+                phase="$(phase_of "$created")"
+                if [[ "$phase" != "Failed" && "$phase" != "Error" ]]; then
+                  echo "Build ${created} ended as ${phase:-unknown}; not retrying" >&2
+                  exit 1
+                fi
+              done
+              echo "Build did not finish before the deadline" >&2
+              exit 1

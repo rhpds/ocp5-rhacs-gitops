@@ -15,10 +15,12 @@ metadata:
   namespace: {{ .Release.Namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "4"
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Regular Job, not a Sync hook. A hook that never completes blocks the
+    # Application, and a failed Job spec is immutable without Replace.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
-  backoffLimit: 30
+  backoffLimit: 1
+  activeDeadlineSeconds: 2400
   template:
     spec:
       serviceAccountName: quay-init-user
@@ -62,7 +64,7 @@ spec:
               QUAY_HOST=""
               for i in $(seq 1 180); do
                 for url in "http://${QUAY_SVC}:8080" "http://${QUAY_SVC}" "https://${QUAY_SVC}"; do
-                  if curl -skf "${url}/api/v1/discovery" >/dev/null; then
+                  if curl --connect-timeout 5 --max-time 30 -skf "${url}/api/v1/discovery" >/dev/null; then
                     QUAY_HOST="${url}"
                     echo "Quay API is reachable at ${QUAY_HOST}"
                     break 2
@@ -77,7 +79,7 @@ spec:
               fi
 
               PAYLOAD=$(python3 -c 'import json,os; print(json.dumps({"username":os.environ["QUAY_USERNAME"],"password":os.environ["QUAY_PASSWORD"],"email":os.environ["QUAY_EMAIL"],"access_token": True}))')
-              HTTP_CODE=$(curl -sk -o /tmp/quay-init.json -w "%{http_code}" \
+              HTTP_CODE=$(curl --connect-timeout 5 --max-time 30 -sk -o /tmp/quay-init.json -w "%{http_code}" \
                 -X POST "${QUAY_HOST}/api/v1/user/initialize" \
                 -H "Content-Type: application/json" \
                 -d "${PAYLOAD}")

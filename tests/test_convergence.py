@@ -191,6 +191,85 @@ class ConvergenceTests(unittest.TestCase):
         self.assertIn('wait "$PID2" || build_failed=1', script)
         subprocess.run(["bash", "-n"], input=script, text=True, check=True)
 
+    def test_failed_bootstrap_apps_can_finish_one_sync(self):
+        policies = [d for d in render("cluster-update") if d["kind"] == "NetworkPolicy"]
+        self.assertEqual(len(policies), 2)
+        for policy in policies:
+            allowed = {(port["port"], port["protocol"]) for port in policy["spec"]["egress"][0]["ports"]}
+            self.assertIn((443, "TCP"), allowed)
+            self.assertIn((6443, "TCP"), allowed)
+            self.assertIn((53, "UDP"), allowed)
+            self.assertIn((53, "TCP"), allowed)
+        jobs = [d for d in render("cluster-update") if d["kind"] == "Job"]
+        self.assertEqual({job["metadata"]["name"] for job in jobs},
+                         {"fauxinnati", "cloud-credential-manual"})
+        for job in jobs:
+            self.assertEqual(job["metadata"]["annotations"]["argocd.argoproj.io/sync-options"],
+                             "Force=true,Replace=true")
+            script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+            self.assertIn("--request-timeout=15s", script)
+            subprocess.run(["bash", "-n"], input=script, text=True, check=True)
+        credential = next(job for job in jobs if job["metadata"]["name"] == "cloud-credential-manual")
+        credential_script = credential["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        patch_at = credential_script.index("if ! oc --request-timeout=15s patch cloudcredential cluster")
+        annotate_at = credential_script.index('cloudcredential.openshift.io/upgradeable-to="5.1.0"')
+        self.assertLess(patch_at, annotate_at)
+        self.assertNotIn("exit", credential_script[patch_at:annotate_at])
+
+        java = []
+        for path in sorted((ROOT / "lightwell-java").glob("*.yaml")):
+            java.extend(doc for doc in yaml.safe_load_all(path.read_text()) if doc)
+        build = next(d for d in java if d["kind"] == "BuildConfig")
+        self.assertFalse(build["spec"].get("triggers"))
+        deployment = next(d for d in java if d["kind"] == "Deployment")
+        build_job = next(d for d in java if d["kind"] == "Job"
+                          and d["metadata"]["name"] == "help-im-vulnerable-build")
+        digest = next(d for d in java if d["metadata"]["name"] == "help-im-vulnerable-record-digest")
+
+        def wave(doc):
+            return int(doc["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"])
+
+        self.assertLess(wave(build_job), wave(deployment))
+        self.assertLess(wave(deployment), wave(digest))
+        self.assertEqual(wave(build_job), 4)
+        self.assertGreaterEqual(deployment["spec"]["progressDeadlineSeconds"], 3600)
+        self.assertEqual(build_job["metadata"]["annotations"]["argocd.argoproj.io/sync-options"],
+                         "Force=true,Replace=true")
+        self.assertGreaterEqual(build_job["spec"]["activeDeadlineSeconds"], 3000)
+        self.assertEqual(digest["metadata"]["annotations"]["argocd.argoproj.io/sync-options"],
+                         "Force=true,Replace=true")
+        self.assertGreaterEqual(digest["spec"]["backoffLimit"], 5)
+        role = next(d for d in java if d["kind"] == "Role")
+        instantiate = next(rule for rule in role["rules"]
+                           if rule["resources"] == ["buildconfigs/instantiate"])
+        self.assertEqual(instantiate["verbs"], ["create"])
+        builds = next(rule for rule in role["rules"] if rule["resources"] == ["builds"])
+        self.assertEqual(set(builds["verbs"]), {"get", "list"})
+        build_script = build_job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        self.assertLess(build_script.index("get serviceaccount builder"),
+                        build_script.index("start-build"))
+        self.assertIn("Failed|Error)", build_script)
+        subprocess.run(["bash", "-n"], input=build_script, text=True, check=True)
+
+        quay = render("quay", sets=["adminPassword=workshop", "clusterSubdomain=apps.example.com"])
+        init = next(d for d in quay if d["kind"] == "Job" and d["metadata"]["name"] == "quay-init-user")
+        self.assertNotIn("argocd.argoproj.io/hook", init["metadata"]["annotations"])
+        self.assertNotIn("argocd.argoproj.io/hook-delete-policy", init["metadata"]["annotations"])
+        self.assertEqual(init["metadata"]["annotations"]["argocd.argoproj.io/sync-options"],
+                         "Force=true,Replace=true")
+        self.assertGreaterEqual(init["spec"]["activeDeadlineSeconds"], 2400)
+        init_container = init["spec"]["template"]["spec"]["containers"][0]
+        init_script = (init_container.get("args") or init_container["command"])[-1]
+        curl_lines = [line for line in init_script.splitlines() if "curl " in line]
+        self.assertGreaterEqual(len(curl_lines), 2)
+        for line in curl_lines:
+            self.assertIn("--connect-timeout 5 --max-time 30", line)
+        subprocess.run(["bash", "-n"], input=init_script, text=True, check=True)
+        images = next(d for d in quay if d["kind"] == "Job" and d["metadata"]["name"] == "workshop-images")
+        self.assertEqual(images["metadata"]["annotations"]["argocd.argoproj.io/sync-options"],
+                         "Force=true,Replace=true")
+        self.assertGreaterEqual(images["spec"]["activeDeadlineSeconds"], 2400)
+
 
 if __name__ == "__main__":
     unittest.main()

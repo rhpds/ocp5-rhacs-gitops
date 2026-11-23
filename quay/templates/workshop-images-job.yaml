@@ -67,6 +67,7 @@ metadata:
     argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
   backoffLimit: 8
+  activeDeadlineSeconds: 2400
   template:
     spec:
       serviceAccountName: workshop-images

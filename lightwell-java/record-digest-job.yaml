@@ -9,9 +9,11 @@ metadata:
     app.kubernetes.io/part-of: lightwell-java
     app.kubernetes.io/name: help-im-vulnerable
   annotations:
-    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-wave: "6"
+    # A failed Job spec is immutable. Replace lets the next sync recreate it.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
-  backoffLimit: 1
+  backoffLimit: 5
   activeDeadlineSeconds: 2400
   ttlSecondsAfterFinished: 86400
   template:
