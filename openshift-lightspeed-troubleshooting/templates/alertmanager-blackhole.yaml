@@ -1,10 +1,20 @@
+# Platform Alertmanager skips namespaces labeled openshift.io/cluster-monitoring=true,
+# which includes openshift-monitoring. A receiver in this namespace is what
+# makes cluster:alertmanager_integrations:max non-zero.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workshop-alerting
+  labels:
+    app.kubernetes.io/part-of: ocp5-rhacs-roadshow
+---
 # Dummy webhook so AlertmanagerReceiversNotConfigured stops firing.
-# Routes nothing real (only a synthetic alertname).
+# The route matches an alertname that never fires, so nothing is sent.
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: AlertmanagerConfig
 metadata:
   name: workshop-blackhole
-  namespace: openshift-monitoring
+  namespace: workshop-alerting
   labels:
     app.kubernetes.io/part-of: ocp5-rhacs-roadshow
   annotations:
