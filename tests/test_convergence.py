@@ -275,5 +275,20 @@ class ConvergenceTests(unittest.TestCase):
         self.assertGreaterEqual(images["spec"]["activeDeadlineSeconds"], 2400)
 
 
+    def test_keycloak_login_uses_roadshow_background(self):
+        docs = render("app-of-apps")
+        theme = next(d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "keycloak-roadshow-theme")
+        self.assertEqual(theme["metadata"]["namespace"], "keycloak")
+        self.assertIn("parent=keycloak.v2", theme["data"]["theme.properties"])
+        self.assertIn("../img/background.jpg", theme["data"]["roadshow.css"])
+        self.assertGreater(len(theme["binaryData"]["background.jpg"]), 1000)
+        job = next(d for d in docs if d["kind"] == "Job" and d["metadata"]["name"] == "keycloak-realm-displayname")
+        script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        self.assertIn("Red Hat OpenShift Security Roadshow", script)
+        self.assertIn('THEME="roadshow"', script)
+        self.assertIn("/opt/keycloak/themes/roadshow", script)
+        subprocess.run(["bash", "-n"], input=script, text=True, check=True)
+
+
 if __name__ == "__main__":
     unittest.main()

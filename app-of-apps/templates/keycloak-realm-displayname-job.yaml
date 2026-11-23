@@ -15,6 +15,16 @@ rules:
     resources: ["secrets"]
     resourceNames: ["keycloak-initial-admin"]
     verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["keycloak-roadshow-theme"]
+    verbs: ["get"]
+  - apiGroups: ["k8s.keycloak.org"]
+    resources: ["keycloaks"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -30,10 +40,10 @@ roleRef:
   name: keycloak-realm-displayname
   apiGroup: rbac.authorization.k8s.io
 ---
-# Sets the Keycloak realm display name shown on the login page.
-# The ocp4_workload_authentication role does not support this natively,
-# and KeycloakRealmImport is a one-shot resource that won't re-reconcile,
-# so we patch via the Keycloak admin API after import completes.
+# Sets the Keycloak login theme and the realm display name.
+# The authentication workload has no field for either, and KeycloakRealmImport
+# does not re-reconcile, so this mounts the theme onto the Keycloak CR and
+# then updates the realm through the admin API.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -65,19 +75,124 @@ spec:
             - |
               set -euo pipefail
               REALM="keycloak"
-              DISPLAY_NAME="Red Hat OpenShift 5 Early Access"
+              DISPLAY_NAME="Red Hat OpenShift Security Roadshow"
+              THEME="roadshow"
               SSO_URL="https://keycloak.keycloak.svc:8443"
+              NS="keycloak"
 
-              ADMIN_USER=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.username}' | base64 -d)
-              ADMIN_PASS=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.password}' | base64 -d)
+              python3 << 'PY'
+              import base64, hashlib, json, subprocess, time
 
-              TOKEN=$(curl -sk "${SSO_URL}/realms/master/protocol/openid-connect/token" \
-                -d "grant_type=password&client_id=admin-cli&username=${ADMIN_USER}&password=${ADMIN_PASS}" | \
-                python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+              NS = "keycloak"
 
-              curl -sk -X PUT "${SSO_URL}/admin/realms/${REALM}" \
-                -H "Authorization: Bearer ${TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "{\"displayName\": \"${DISPLAY_NAME}\"}"
+              def oc(*args, check=True):
+                  result = subprocess.run(["oc", *args], text=True, capture_output=True)
+                  if check and result.returncode != 0:
+                      raise SystemExit(result.stderr[-400:] or result.stdout[-400:])
+                  return result
 
-              echo "Realm display name set to: ${DISPLAY_NAME}"
+              cm = json.loads(oc("get", "configmap", "keycloak-roadshow-theme", "-n", NS, "-o", "json").stdout)
+              digest = hashlib.sha256(base64.b64decode(cm["binaryData"]["background.jpg"])).hexdigest()[:16]
+              cr_name = oc("get", "keycloaks.k8s.keycloak.org", "-n", NS, "-o", "jsonpath={.items[0].metadata.name}").stdout.strip()
+              if not cr_name:
+                  raise SystemExit("Keycloak instance not found")
+              doc = json.loads(oc("get", "keycloak", cr_name, "-n", NS, "-o", "json").stdout)
+              unsupported = doc.setdefault("spec", {}).setdefault("unsupported", {})
+              pod = unsupported.setdefault("podTemplate", {})
+              pspec = pod.setdefault("spec", {})
+              volume = {
+                  "name": "roadshow-theme",
+                  "configMap": {
+                      "name": "keycloak-roadshow-theme",
+                      "items": [
+                          {"key": "theme.properties", "path": "login/theme.properties"},
+                          {"key": "roadshow.css", "path": "login/resources/css/roadshow.css"},
+                          {"key": "background.jpg", "path": "login/resources/img/background.jpg"},
+                      ],
+                  },
+              }
+              pspec["volumes"] = [item for item in (pspec.get("volumes") or []) if item.get("name") != "roadshow-theme"] + [volume]
+              containers = pspec.get("containers") or [{}]
+              mounts = [item for item in (containers[0].get("volumeMounts") or []) if item.get("name") != "roadshow-theme"]
+              mounts.append({
+                  "name": "roadshow-theme",
+                  "mountPath": "/opt/keycloak/themes/roadshow",
+                  "readOnly": True,
+              })
+              containers[0]["volumeMounts"] = mounts
+              pspec["containers"] = containers
+              metadata = pod.get("metadata") or {}
+              pod["metadata"] = metadata
+              annotations = metadata.get("annotations") or {}
+              metadata["annotations"] = annotations
+              previous = annotations.get("roadshow.openshift.io/theme-digest")
+              annotations["roadshow.openshift.io/theme-digest"] = digest
+              if previous != digest:
+                  oc("patch", "keycloak", cr_name, "-n", NS, "--type", "merge", "-p", json.dumps({
+                      "spec": {"unsupported": {"podTemplate": pod}},
+                  }))
+                  print("mounted roadshow theme on", cr_name)
+              else:
+                  print("roadshow theme already mounted")
+
+              deadline = time.time() + 180
+              sts_name = ""
+              while time.time() < deadline:
+                  listed = json.loads(oc("get", "statefulsets", "-n", NS, "-o", "json").stdout)
+                  for item in listed.get("items") or []:
+                      vols = ((item.get("spec") or {}).get("template") or {}).get("spec", {}).get("volumes") or []
+                      if any(vol.get("name") == "roadshow-theme" for vol in vols):
+                          sts_name = item["metadata"]["name"]
+                          break
+                  if sts_name:
+                      break
+                  time.sleep(5)
+              if not sts_name:
+                  raise SystemExit("theme volume did not appear on the Keycloak statefulset")
+              oc("rollout", "status", "statefulset/" + sts_name, "-n", NS, "--timeout=420s")
+              print("keycloak rolled out with theme", sts_name)
+              PY
+
+              ADMIN_USER=$(oc get secret keycloak-initial-admin -n "$NS" -o jsonpath='{.data.username}' | base64 -d)
+              ADMIN_PASS=$(oc get secret keycloak-initial-admin -n "$NS" -o jsonpath='{.data.password}' | base64 -d)
+              export ADMIN_USER ADMIN_PASS REALM DISPLAY_NAME THEME SSO_URL
+              python3 << 'PY'
+              import json, os, ssl, urllib.parse, urllib.request, urllib.error
+
+              ctx = ssl._create_unverified_context()
+              base = os.environ["SSO_URL"]
+
+              def call(method, path, payload=None, form=None):
+                  data = None
+                  headers = {"Accept": "application/json"}
+                  if form is not None:
+                      data = urllib.parse.urlencode(form).encode()
+                      headers["Content-Type"] = "application/x-www-form-urlencoded"
+                  elif payload is not None:
+                      data = json.dumps(payload).encode()
+                      headers["Content-Type"] = "application/json"
+                  if path != "/realms/master/protocol/openid-connect/token":
+                      headers["Authorization"] = "Bearer " + token
+                  req = urllib.request.Request(base + path, data=data, method=method, headers=headers)
+                  try:
+                      with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
+                          raw = resp.read()
+                          return json.loads(raw) if raw else None
+                  except urllib.error.HTTPError as exc:
+                      body = exc.read().decode("utf-8", "replace")
+                      raise SystemExit("Keycloak %s %s HTTP %s: %s" % (method, path, exc.code, body[:300]))
+
+              token = call("POST", "/realms/master/protocol/openid-connect/token", form={
+                  "grant_type": "password",
+                  "client_id": "admin-cli",
+                  "username": os.environ["ADMIN_USER"],
+                  "password": os.environ["ADMIN_PASS"],
+              })["access_token"]
+              realm_path = "/admin/realms/" + os.environ["REALM"]
+              realm = call("GET", realm_path)
+              realm["displayName"] = os.environ["DISPLAY_NAME"]
+              realm["loginTheme"] = os.environ["THEME"]
+              call("PUT", realm_path, realm)
+              print("login theme", os.environ["THEME"])
+              print("display name", os.environ["DISPLAY_NAME"])
+              PY
