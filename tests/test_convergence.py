@@ -28,7 +28,7 @@ class ConvergenceTests(unittest.TestCase):
             self.assertTrue(doc["spec"]["policySections"])
 
     def test_alert_filter_is_preserved(self):
-        doc = next(d for d in render("openshift-lightspeed-troubleshooting")
+        doc = next(d for d in render("roadshow-prereqs")
                    if d["kind"] == "AlertmanagerConfig")
         self.assertEqual(doc["spec"]["route"]["matchers"], [{
             "name": "alertname", "matchType": "=", "value": "WorkshopBlackholeNeverFires"
@@ -40,7 +40,17 @@ class ConvergenceTests(unittest.TestCase):
                    if d["metadata"]["name"] == "roadshow-demo-apps")
         self.assertNotIn("source", app["spec"])
         sources = app["spec"]["sources"]
-        self.assertIn("ctf-web-to-system/**", sources[0]["directory"]["exclude"])
+        exclude = sources[0]["directory"]["exclude"]
+        for pattern in (
+            "ctf-web-to-system/**",
+            "medical-application/operations/**",
+            "protected-report-app/**",
+            "struts-2024/**",
+            "unprotected-api-server/**",
+            "vulnerable-node-app/**",
+        ):
+            self.assertIn(pattern, exclude)
+        self.assertNotIn("medical-application/backend/**", exclude)
         self.assertEqual(sources[1]["path"], "roadshow-ctf")
         docs = list(yaml.safe_load_all((ROOT / "roadshow-ctf/resources.yaml").read_text()))
         svc = next(d for d in docs if d["kind"] == "Service")

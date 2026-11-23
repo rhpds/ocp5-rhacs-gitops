@@ -144,8 +144,11 @@ consoleBuild:
   name: console-build
   namespace: console-build
 
+# Inventory, catalog, user-imports, service-mesh, and the extra payments
+# API are a Lightspeed exercise that is not in Showroom. Off until that
+# module exists. The Alertmanager blackhole stays in roadshow-prereqs.
 openshiftLightspeedTroubleshooting:
-  enabled: true
+  enabled: false
   name: openshift-lightspeed-troubleshooting
   namespace: inventory
 

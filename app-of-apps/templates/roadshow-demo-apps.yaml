@@ -15,7 +15,9 @@ spec:
         recurse: true
         # CTF is maintained locally for OpenShift: the upstream manifest uses
         # an unsupported LoadBalancer service and metadata.annotation.
-        exclude: '{juice-shop/**,medical-application/frontend/**,ctf-web-to-system/**}'
+        # The other excludes have no Showroom lab. Keep backend, payments,
+        # medical, dvwa, and webgoat.
+        exclude: '{juice-shop/**,medical-application/frontend/**,medical-application/operations/**,ctf-web-to-system/**,protected-report-app/**,struts-2024/**,unprotected-api-server/**,vulnerable-node-app/**}'
     - repoURL: {{ .Values.gitops.repoURL }}
       targetRevision: {{ .Values.gitops.targetRevision }}
       path: roadshow-ctf
