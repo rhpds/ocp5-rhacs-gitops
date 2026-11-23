@@ -71,6 +71,10 @@ class ConvergenceTests(unittest.TestCase):
         script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
         self.assertIn('ADMIN_URL="https://keycloak.keycloak.svc:8443"', script)
         self.assertIn('SSO_URL="https://sso.', script)
+        self.assertIn("def with_explicit_port", script)
+        self.assertIn('port="443"', script)
+        self.assertIn('"/v1/groups"', script)
+        self.assertIn('"multivalued": "true"', script)
         self.assertNotIn("${SSO_URL}/", script)
         self.assertIn('--data-urlencode "password=${ADMIN_PASS}"', script)
         self.assertEqual(job["spec"]["activeDeadlineSeconds"], 600)

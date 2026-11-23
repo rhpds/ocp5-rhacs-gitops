@@ -214,10 +214,8 @@ spec:
                   return client
 
               def ensure_groups_mapper(client_id):
-                  mappers = kc("GET", "/admin/realms/%s/clients/%s/protocol-mappers/models" % (realm, client_id)) or []
-                  if any(mapper.get("name") == "groups" for mapper in mappers):
-                      return
-                  kc("POST", "/admin/realms/%s/clients/%s/protocol-mappers/models" % (realm, client_id), {
+                  # ACS decodes the groups claim as a JSON array. A single string fails that decode.
+                  body = {
                       "name": "groups",
                       "protocol": "openid-connect",
                       "protocolMapper": "oidc-group-membership-mapper",
@@ -229,8 +227,16 @@ spec:
                           "userinfo.token.claim": "true",
                           "claim.name": "groups",
                           "jsonType.label": "String",
+                          "multivalued": "true",
                       },
-                  })
+                  }
+                  mappers = kc("GET", "/admin/realms/%s/clients/%s/protocol-mappers/models" % (realm, client_id)) or []
+                  current = next((mapper for mapper in mappers if mapper.get("name") == "groups"), None)
+                  if current:
+                      body["id"] = current["id"]
+                      kc("PUT", "/admin/realms/%s/clients/%s/protocol-mappers/models/%s" % (realm, client_id, current["id"]), body)
+                      return
+                  kc("POST", "/admin/realms/%s/clients/%s/protocol-mappers/models" % (realm, client_id), body)
 
               print("issuer", issuer)
               student_email = "student@workshop.local"
@@ -241,9 +247,20 @@ spec:
               doc_scopes = [ensure_scope(name) for name in ("read:document", "create:document", "delete:document")]
 
               host = lambda name: "https://" + name + "." + subdomain
+
+              def with_explicit_port(url, port="443"):
+                  parts = urllib.parse.urlsplit(url)
+                  return urllib.parse.urlunsplit((parts.scheme, "%s:%s" % (parts.hostname, port), "", "", ""))
+
+              # Central normalizes every UI endpoint to host:443 and puts that port in the
+              # OIDC callback. A redirect registered without the port never matches.
+              rhacs_ui = host("central-reencrypt-stackrox")
               cli_secret = pick(secret_data("trusted-profile-analyzer", "tpa-realm-cli-clients"), "cli")
               clients = {
-                  "rhacs": ensure_client("rhacs", False, password, [host("central-reencrypt-stackrox") + "/*"]),
+                  "rhacs": ensure_client("rhacs", False, password, [
+                      rhacs_ui + "/*",
+                      with_explicit_port(rhacs_ui) + "/*",
+                  ]),
                   "quay": ensure_client("quay", False, password, [
                       host("registry-quay-quay") + "/oauth2/keycloak/callback",
                       host("registry-quay-quay") + "/oauth2/keycloak/callback/attach",
@@ -281,7 +298,7 @@ spec:
               print("argocd policy includes", policy_line)
 
               basic = "Basic " + base64.b64encode(("admin:" + pick(secret_data("rhacs-operator", "central-admin-password"), "password")).encode()).decode()
-              ui = host("central-reencrypt-stackrox")
+              ui = rhacs_ui
               central = "https://central.rhacs-operator.svc:443"
 
               def central_req(method, path, payload=None):
@@ -311,16 +328,36 @@ spec:
                       "client_secret": password,
                       "mode": "post",
                   },
-                  "groups": [{"key": "groups", "value": "admins", "roleName": "Admin"}],
               }
               existing = (central_req("GET", "/v1/authProviders") or {}).get("authProviders") or []
               current = next((item for item in existing if item.get("name") == "Keycloak"), None)
               if current:
                   provider["id"] = current["id"]
-                  central_req("PUT", "/v1/authProviders/" + current["id"], provider)
+                  saved = central_req("PUT", "/v1/authProviders/" + current["id"], provider)
               else:
-                  central_req("POST", "/v1/authProviders", provider)
-              print("acs auth provider Keycloak")
+                  saved = central_req("POST", "/v1/authProviders", provider)
+              provider_id = (saved or current or {}).get("id")
+              if not provider_id:
+                  raise SystemExit("ACS auth provider Keycloak has no id")
+              # ACS 5 ignores a groups field on the provider. Role rules are /v1/groups.
+              groups = (central_req("GET", "/v1/groups") or {}).get("groups") or []
+              has_admin = any(
+                  (group.get("props") or {}).get("authProviderId") == provider_id
+                  and (group.get("props") or {}).get("key") == "groups"
+                  and (group.get("props") or {}).get("value") == "admins"
+                  and group.get("roleName") == "Admin"
+                  for group in groups
+              )
+              if not has_admin:
+                  central_req("POST", "/v1/groups", {
+                      "roleName": "Admin",
+                      "props": {
+                          "authProviderId": provider_id,
+                          "key": "groups",
+                          "value": "admins",
+                      },
+                  })
+              print("acs auth provider Keycloak", provider_id)
 
               gitea_secret = secret_data("gitea", "gitea-admin")
               gitea_basic = base64.b64encode((
