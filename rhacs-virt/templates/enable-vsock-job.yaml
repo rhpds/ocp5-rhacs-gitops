@@ -42,6 +42,11 @@ spec:
                   --overwrite --request-timeout=15s
               fi
 
+              # Kube Descheduler is optional. Opt out so VirtPlatformAutopilotDependencyMissing stays quiet.
+              oc annotate hyperconverged kubevirt-hyperconverged -n openshift-cnv \
+                "$(printf '%s\n' 'platform.kubevirt.io/disabled-resources=- kind: KubeDescheduler' '  name: cluster')" \
+                --overwrite --request-timeout=15s
+
               # The HCO annotation is asynchronous. Also wait for the admission
               # webhook to accept VSOCK, not just for the KubeVirt spec to change.
               probe=$(mktemp)

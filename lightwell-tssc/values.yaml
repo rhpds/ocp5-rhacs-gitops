@@ -25,7 +25,9 @@ deployer:
 resources:
   rhtpa:
     cpu: "500m"
-    memory: 8Gi
+    # The API process uses well under 1Gi. 8Gi of requests kept the cluster
+    # overcommitted if the largest node failed.
+    memory: 2Gi
   nexus:
     cpu: 500m
     memoryRequest: 2Gi

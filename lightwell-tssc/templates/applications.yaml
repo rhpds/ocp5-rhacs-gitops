@@ -358,6 +358,8 @@ spec:
         - .metadata.labels["pod-security.kubernetes.io/audit-version"]
         - .metadata.labels["pod-security.kubernetes.io/warn"]
         - .metadata.labels["pod-security.kubernetes.io/warn-version"]
+        - .metadata.labels["app.kubernetes.io/name"]
+        - .metadata.labels["app.kubernetes.io/instance"]
         - .metadata.annotations["openshift.io/sa.scc.mcs"]
         - .metadata.annotations["openshift.io/sa.scc.supplemental-groups"]
         - .metadata.annotations["openshift.io/sa.scc.uid-range"]

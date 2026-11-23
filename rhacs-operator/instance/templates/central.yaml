@@ -35,6 +35,14 @@ spec:
     persistence:
       persistentVolumeClaim:
         claimName: stackrox-db
+    # The operator default requests 8Gi. This database sits under 1Gi, and
+    # that request was a large part of KubeMemoryOvercommit.
+    db:
+      resources:
+        requests:
+          memory: 2Gi
+        limits:
+          memory: 4Gi
 {{- if .Values.vmScanning.enabled }}
   customize:
     envVars:

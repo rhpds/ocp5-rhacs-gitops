@@ -335,9 +335,34 @@ spec:
               }
               existing = (central_req("GET", "/v1/authProviders") or {}).get("authProviders") or []
               current = next((item for item in existing if item.get("name") == "Keycloak"), None)
-              if current:
+
+              def config_matches(found, desired):
+                  cfg = (found or {}).get("config") or {}
+                  want = desired["config"]
+                  # ACS redacts client_secret on read, so it never compares equal.
+                  return all(
+                      str(cfg.get(key) or "") == str(want.get(key) or "")
+                      for key in ("issuer", "client_id", "mode", "disable_offline_access_scope")
+                  )
+
+              if current and config_matches(current, provider):
+                  # ACS rejects PUT after the first login even when nothing changed.
+                  saved = current
+                  print("acs auth provider unchanged", current["id"])
+              elif current:
                   provider["id"] = current["id"]
-                  saved = central_req("PUT", "/v1/authProviders/" + current["id"], provider)
+                  try:
+                      saved = central_req("PUT", "/v1/authProviders/" + current["id"], provider)
+                  except SystemExit as exc:
+                      text = exc.code if isinstance(exc.code, str) else str(exc)
+                      if "cannot update an auth provider once it has been used" not in text:
+                          raise
+                      # ACS tells us to delete and re-add. Only reached when the
+                      # stored config does not match this job.
+                      central_req("DELETE", "/v1/authProviders/" + current["id"])
+                      provider.pop("id", None)
+                      saved = central_req("POST", "/v1/authProviders", provider)
+                      print("acs auth provider recreated")
               else:
                   saved = central_req("POST", "/v1/authProviders", provider)
               provider_id = (saved or current or {}).get("id")

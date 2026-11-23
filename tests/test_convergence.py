@@ -121,6 +121,8 @@ class ConvergenceTests(unittest.TestCase):
         script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
         self.assertIn('set -euo pipefail', script)
         self.assertIn('until gate_enabled && oc create --dry-run=server', script)
+        self.assertIn('platform.kubevirt.io/disabled-resources', script)
+        self.assertIn('kind: KubeDescheduler', script)
         self.assertIn('SECONDS + 600', script)
         role = next(d for d in docs if d["kind"] == "Role")
         self.assertEqual(role["rules"][0]["resources"], ["virtualmachines"])
@@ -147,9 +149,14 @@ class ConvergenceTests(unittest.TestCase):
         components = registry["spec"]["components"]
         self.assertEqual(len(components), 11)
         self.assertEqual(len({c["kind"] for c in components}), len(components))
-        for kind in ("quay", "clairpostgres"):
+        for kind in ("clairpostgres",):
             self.assertEqual(next(c for c in components if c["kind"] == kind),
                              {"kind": kind, "managed": True})
+        quay = next(c for c in components if c["kind"] == "quay")
+        self.assertEqual(quay["managed"], True)
+        self.assertEqual(quay["overrides"]["replicas"], 1)
+        clair = next(c for c in components if c["kind"] == "clair")
+        self.assertEqual(clair["overrides"]["replicas"], 1)
 
     def test_acm_uses_live_catalog_and_enables_console(self):
         app = next(d for d in render("app-of-apps") if d["metadata"]["name"] == "acm")

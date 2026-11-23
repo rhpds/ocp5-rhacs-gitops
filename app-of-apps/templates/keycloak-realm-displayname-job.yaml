@@ -21,7 +21,7 @@ rules:
     verbs: ["get"]
   - apiGroups: ["k8s.keycloak.org"]
     resources: ["keycloaks"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "list", "patch"]
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
     verbs: ["get", "list", "watch"]
@@ -112,7 +112,9 @@ spec:
                   },
               }
               pspec["volumes"] = [item for item in (pspec.get("volumes") or []) if item.get("name") != "roadshow-theme"] + [volume]
-              containers = pspec.get("containers") or [{}]
+              containers = pspec.get("containers") or [{"name": "keycloak"}]
+              if not containers[0].get("name"):
+                  containers[0]["name"] = "keycloak"
               mounts = [item for item in (containers[0].get("volumeMounts") or []) if item.get("name") != "roadshow-theme"]
               mounts.append({
                   "name": "roadshow-theme",

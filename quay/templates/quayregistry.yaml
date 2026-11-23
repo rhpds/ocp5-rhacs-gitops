@@ -14,6 +14,8 @@ spec:
       managed: true
     - kind: clair
       managed: true
+      overrides:
+        replicas: 1
     - kind: redis
       managed: true
     - kind: objectstorage
@@ -33,7 +35,10 @@ spec:
     - kind: monitoring
       managed: false
     # Explicit operator defaults keep the component list stable in Argo.
+    # One replica. A second quay pod requested another 8Gi.
     - kind: quay
       managed: true
+      overrides:
+        replicas: 1
     - kind: clairpostgres
       managed: true
