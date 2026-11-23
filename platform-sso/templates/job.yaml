@@ -327,6 +327,10 @@ spec:
                       "client_id": "rhacs",
                       "client_secret": password,
                       "mode": "post",
+                      # ACS adds offline_access whenever the IdP advertises it. This realm
+                      # does not allow offline tokens, so the first code exchange is rejected
+                      # and the retry reports "Code not valid".
+                      "disable_offline_access_scope": "true",
                   },
               }
               existing = (central_req("GET", "/v1/authProviders") or {}).get("authProviders") or []

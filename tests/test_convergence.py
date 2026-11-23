@@ -75,6 +75,7 @@ class ConvergenceTests(unittest.TestCase):
         self.assertIn('port="443"', script)
         self.assertIn('"/v1/groups"', script)
         self.assertIn('"multivalued": "true"', script)
+        self.assertIn('"disable_offline_access_scope": "true"', script)
         self.assertNotIn("${SSO_URL}/", script)
         self.assertIn('--data-urlencode "password=${ADMIN_PASS}"', script)
         self.assertEqual(job["spec"]["activeDeadlineSeconds"], 600)
