@@ -1,0 +1,91 @@
+# Search sets spec.dbStorage.size but still uses an emptyDir until a
+# StorageClass is named. That emptyDir is what fires SearchPVCNotPresent.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: search-db-storage
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: search-db-storage
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+  - apiGroups: ["search.open-cluster-management.io"]
+    resources: ["searches"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: search-db-storage
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: search-db-storage
+subjects:
+  - kind: ServiceAccount
+    name: search-db-storage
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: search-db-storage
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1500
+  template:
+    spec:
+      serviceAccountName: search-db-storage
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: search-db-storage
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              for _ in $(seq 1 60); do
+                if oc get search search-v2-operator -n open-cluster-management >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 15
+              done
+              oc get search search-v2-operator -n open-cluster-management
+              current="$(oc get search search-v2-operator -n open-cluster-management -o jsonpath='{.spec.dbStorage.storageClassName}')"
+              if [ -n "${current}" ]; then
+                echo "Search storage class already set: ${current}"
+                exit 0
+              fi
+              sc="$(oc get storageclass -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{"\n"}{end}' | head -n 1)"
+              if [ -z "${sc}" ]; then
+                echo "No default StorageClass; Search would stay on an emptyDir" >&2
+                exit 1
+              fi
+              oc patch search search-v2-operator -n open-cluster-management --type merge \
+                -p "{\"spec\":{\"dbStorage\":{\"storageClassName\":\"${sc}\"}}}"
+              echo "Search database StorageClass set to ${sc}"

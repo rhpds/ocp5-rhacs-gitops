@@ -182,6 +182,13 @@ class ConvergenceTests(unittest.TestCase):
         self.assertIn('PLUGIN="acm"', script)
         self.assertIn("console.operator.openshift.io cluster", script)
         subprocess.run(["bash", "-n"], input=script, text=True, check=True)
+        search_job = next(d for d in docs if d["kind"] == "Job"
+                          and d["metadata"]["name"] == "search-db-storage")
+        search_script = search_job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        self.assertIn("search-v2-operator", search_script)
+        self.assertIn("storageClassName", search_script)
+        self.assertIn("is-default-class", search_script)
+        subprocess.run(["bash", "-n"], input=search_script, text=True, check=True)
 
     def test_build_job_can_be_retried_and_waits_for_target(self):
         job = next(d for d in render("agentic-updates-builds") if d["kind"] == "Job")
@@ -226,6 +233,7 @@ class ConvergenceTests(unittest.TestCase):
             java.extend(doc for doc in yaml.safe_load_all(path.read_text()) if doc)
         build = next(d for d in java if d["kind"] == "BuildConfig")
         self.assertFalse(build["spec"].get("triggers"))
+        self.assertNotIn("forcePull", build["spec"]["strategy"]["dockerStrategy"])
         deployment = next(d for d in java if d["kind"] == "Deployment")
         build_job = next(d for d in java if d["kind"] == "Job"
                           and d["metadata"]["name"] == "help-im-vulnerable-build")

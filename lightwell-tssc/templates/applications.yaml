@@ -339,6 +339,7 @@ spec:
     server: https://kubernetes.default.svc
     namespace: {{ .Values.components.admission.namespace }}
   # TUF copy Job fills fulcio_v1.crt.pem / rekor.pub; do not let Helm wipe them.
+  # Pipelines labels every namespace it reconciles. Those labels are not in git.
   ignoreDifferences:
     - kind: Secret
       name: rhtas-tuf-keys
@@ -349,6 +350,18 @@ spec:
       name: lab-cosign-pubkey
       jsonPointers:
         - /data
+    - kind: Namespace
+      jqPathExpressions:
+        - .metadata.labels["openshift-pipelines.tekton.dev/namespace-reconcile-version"]
+        - .metadata.labels["openshift-pipelines.tekton.dev/namespace-trusted-configmaps-version"]
+        - .metadata.labels["pod-security.kubernetes.io/audit"]
+        - .metadata.labels["pod-security.kubernetes.io/audit-version"]
+        - .metadata.labels["pod-security.kubernetes.io/warn"]
+        - .metadata.labels["pod-security.kubernetes.io/warn-version"]
+        - .metadata.annotations["openshift.io/sa.scc.mcs"]
+        - .metadata.annotations["openshift.io/sa.scc.supplemental-groups"]
+        - .metadata.annotations["openshift.io/sa.scc.uid-range"]
+        - .metadata.annotations["security.openshift.io/MinimallySufficientPodSecurityStandard"]
   syncPolicy:
     automated:
       prune: true
@@ -393,6 +406,7 @@ spec:
     namespace: {{ .Values.components.networkPolicy.namespace }}
   # Learner tightens build-egress in 4.3. Do not let Helm restore allow-all egress.
   # OpenShift rewrites namespace PSA labels and SCC annotations.
+  # Pipelines adds its own namespace labels once the operator is healthy.
   ignoreDifferences:
     - group: networking.k8s.io
       kind: NetworkPolicy
@@ -409,9 +423,12 @@ spec:
         - .metadata.labels["pod-security.kubernetes.io/warn"]
         - .metadata.labels["pod-security.kubernetes.io/warn-version"]
         - .metadata.labels["security.openshift.io/scc.podSecurityLabelSync"]
+        - .metadata.labels["openshift-pipelines.tekton.dev/namespace-reconcile-version"]
+        - .metadata.labels["openshift-pipelines.tekton.dev/namespace-trusted-configmaps-version"]
         - .metadata.annotations["openshift.io/sa.scc.mcs"]
         - .metadata.annotations["openshift.io/sa.scc.supplemental-groups"]
         - .metadata.annotations["openshift.io/sa.scc.uid-range"]
+        - .metadata.annotations["security.openshift.io/MinimallySufficientPodSecurityStandard"]
   syncPolicy:
     automated:
       prune: true

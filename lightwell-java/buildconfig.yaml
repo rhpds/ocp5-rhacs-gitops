@@ -25,7 +25,6 @@ spec:
     type: Docker
     dockerStrategy:
       dockerfilePath: Containerfile
-      forcePull: false
   output:
     to:
       kind: ImageStreamTag

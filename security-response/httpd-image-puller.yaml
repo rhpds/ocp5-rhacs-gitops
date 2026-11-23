@@ -1,0 +1,18 @@
+# payment-gateway pulls httpd through the internal registry. That registry
+# only grants system:image-puller to service accounts in the openshift
+# namespace, so the default account in payment-gateway-1 gets 401 without this.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: payment-gateway-httpd-puller
+  namespace: openshift
+  labels:
+    app.kubernetes.io/part-of: ocp5-rhacs-roadshow
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: payment-gateway-1
